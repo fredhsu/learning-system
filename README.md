@@ -2,6 +2,8 @@
 
 A knowledge management and spaced repetition learning platform built in Rust, implementing the FSRS (Free Spaced Repetition Scheduler) algorithm with LLM-powered quiz generation.
 
+> ⚠️ **Known Issue**: LLM quiz generation currently limited due to OpenAI API quota. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for details and resolution options.
+
 ## Features
 
 - **Spaced Repetition**: Uses the FSRS algorithm for optimal review scheduling
