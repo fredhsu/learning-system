@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning System - FSRS Quiz Platform</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Learning System</h1>
+            <nav>
+                <button id="nav-cards" class="nav-btn active">Cards</button>
+                <button id="nav-review" class="nav-btn">Review</button>
+                <button id="nav-topics" class="nav-btn">Topics</button>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Cards View -->
+            <div id="cards-view" class="view active">
+                <div class="view-header">
+                    <h2>Knowledge Cards</h2>
+                    <button id="create-card-btn" class="primary-btn">Create New Card</button>
+                </div>
+                
+                <div id="cards-list"></div>
+                
+                <!-- Create Card Modal -->
+                <div id="create-card-modal" class="modal">
+                    <div class="modal-content">
+                        <span class="close">&times;</span>
+                        <h3>Create New Card</h3>
+                        <form id="create-card-form">
+                            <div class="form-group">
+                                <label for="card-content">Content (supports LaTeX):</label>
+                                <textarea id="card-content" rows="6" placeholder="Enter your knowledge card content here..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="card-topics">Topics (comma-separated):</label>
+                                <input type="text" id="card-topics" placeholder="mathematics, algebra, equations">
+                            </div>
+                            <div class="form-group">
+                                <label for="card-links">Linked Cards (optional):</label>
+                                <input type="text" id="card-links" placeholder="Enter card IDs to link">
+                            </div>
+                            <button type="submit" class="primary-btn">Create Card</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Review View -->
+            <div id="review-view" class="view">
+                <div class="view-header">
+                    <h2>Review Session</h2>
+                    <p id="due-count">Loading due cards...</p>
+                </div>
+                
+                <div id="review-content">
+                    <div id="no-reviews" class="empty-state">
+                        <h3>No cards due for review!</h3>
+                        <p>Check back later or create some new cards.</p>
+                    </div>
+                    
+                    <div id="quiz-container" class="quiz-container">
+                        <div id="card-content-display" class="card-display"></div>
+                        <div id="quiz-questions"></div>
+                        <div id="quiz-feedback" class="feedback"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Topics View -->
+            <div id="topics-view" class="view">
+                <div class="view-header">
+                    <h2>Topics</h2>
+                    <button id="create-topic-btn" class="primary-btn">Create Topic</button>
+                </div>
+                
+                <div id="topics-list"></div>
+                
+                <!-- Create Topic Modal -->
+                <div id="create-topic-modal" class="modal">
+                    <div class="modal-content">
+                        <span class="close">&times;</span>
+                        <h3>Create New Topic</h3>
+                        <form id="create-topic-form">
+                            <div class="form-group">
+                                <label for="topic-name">Name:</label>
+                                <input type="text" id="topic-name" required placeholder="Topic name">
+                            </div>
+                            <div class="form-group">
+                                <label for="topic-description">Description:</label>
+                                <textarea id="topic-description" rows="3" placeholder="Topic description (optional)"></textarea>
+                            </div>
+                            <button type="submit" class="primary-btn">Create Topic</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="loading" class="loading">Loading...</div>
+    <div id="error-toast" class="toast error-toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
