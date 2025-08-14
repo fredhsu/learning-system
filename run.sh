@@ -1,8 +1,14 @@
 #!/bin/bash
 # Learning System Launch Script
 
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+    echo "Loading environment from .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # Set default environment variables if not already set
-export DATABASE_URL="${DATABASE_URL:-sqlite:learning.db}"
+export DATABASE_URL="${DATABASE_URL:-sqlite:./learning_system.db}"
 export PORT="${PORT:-3000}"
 
 # You can set your LLM API key here or via environment

@@ -110,10 +110,24 @@ impl LLMService {
             .send()
             .await?;
 
+        // Check if response is successful
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await?;
+            eprintln!("API Error ({}): {}", status, error_text);
+            return Err(anyhow::anyhow!("API request failed: {}", error_text));
+        }
+
         let llm_response: LLMResponse = response.json().await?;
         
         if let Some(choice) = llm_response.choices.first() {
-            let generated_quiz: GeneratedQuiz = serde_json::from_str(&choice.message.content)?;
+            // Extract JSON from markdown code blocks if present
+            let content = &choice.message.content;
+            eprintln!("LLM Response content: {}", content);
+            let json_content = extract_json_from_response(content);
+            eprintln!("Extracted JSON: {}", json_content);
+            
+            let generated_quiz: GeneratedQuiz = serde_json::from_str(&json_content)?;
             Ok(generated_quiz.questions)
         } else {
             Err(anyhow::anyhow!("No response from LLM"))
@@ -180,7 +194,11 @@ impl LLMService {
         let llm_response: LLMResponse = response.json().await?;
         
         if let Some(choice) = llm_response.choices.first() {
-            let grading_result: GradingResult = serde_json::from_str(&choice.message.content)?;
+            // Extract JSON from markdown code blocks if present
+            let content = &choice.message.content;
+            let json_content = extract_json_from_response(content);
+            
+            let grading_result: GradingResult = serde_json::from_str(&json_content)?;
             Ok(grading_result)
         } else {
             Err(anyhow::anyhow!("No response from LLM"))
@@ -199,4 +217,41 @@ impl LLMService {
             correct_answer: Some("Based on the card content".to_string()),
         }])
     }
+}
+
+// Helper function to extract JSON from LLM responses that might be wrapped in markdown
+fn extract_json_from_response(content: &str) -> String {
+    // Try to find JSON within markdown code blocks
+    if let Some(start) = content.find("```json") {
+        if let Some(end) = content[start + 7..].find("```") {
+            let json_start = start + 7;
+            let json_end = json_start + end;
+            return content[json_start..json_end].trim().to_string();
+        }
+    }
+    
+    // Try to find JSON within plain code blocks
+    if let Some(start) = content.find("```") {
+        if let Some(end) = content[start + 3..].find("```") {
+            let json_start = start + 3;
+            let json_end = json_start + end;
+            let potential_json = content[json_start..json_end].trim();
+            // Check if it looks like JSON
+            if potential_json.starts_with('{') || potential_json.starts_with('[') {
+                return potential_json.to_string();
+            }
+        }
+    }
+    
+    // Try to find standalone JSON objects
+    if let Some(start) = content.find('{') {
+        if let Some(end) = content.rfind('}') {
+            if end > start {
+                return content[start..=end].to_string();
+            }
+        }
+    }
+    
+    // Return original content if no JSON extraction patterns match
+    content.trim().to_string()
 }
