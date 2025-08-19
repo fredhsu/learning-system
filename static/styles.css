@@ -418,10 +418,91 @@ main {
 }
 
 .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
     font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-4);
     font-weight: var(--font-weight-normal);
+}
+
+.card-meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.2;
+    min-width: 0;
+}
+
+.card-meta-item.created {
+    background: rgba(44, 82, 130, 0.1);
+    color: var(--color-primary);
+    border: 1px solid rgba(44, 82, 130, 0.2);
+}
+
+.card-meta-item.reviews {
+    background: rgba(56, 161, 105, 0.1);
+    color: #38a169;
+    border: 1px solid rgba(56, 161, 105, 0.2);
+}
+
+.card-meta-item.state {
+    background: rgba(221, 107, 32, 0.1);
+    color: #dd6b20;
+    border: 1px solid rgba(221, 107, 32, 0.2);
+}
+
+.card-meta-item.next-review {
+    background: rgba(128, 90, 213, 0.1);
+    color: #805ad5;
+    border: 1px solid rgba(128, 90, 213, 0.2);
+}
+
+.card-meta-item.state.new {
+    background: rgba(56, 161, 105, 0.1);
+    color: #38a169;
+    border: 1px solid rgba(56, 161, 105, 0.2);
+}
+
+.card-meta-item.state.learning {
+    background: rgba(221, 107, 32, 0.1);
+    color: #dd6b20;
+    border: 1px solid rgba(221, 107, 32, 0.2);
+}
+
+.card-meta-item.state.review {
+    background: rgba(44, 82, 130, 0.1);
+    color: var(--color-primary);
+    border: 1px solid rgba(44, 82, 130, 0.2);
+}
+
+.card-meta-item.state.relearning {
+    background: rgba(229, 62, 62, 0.1);
+    color: #e53e3e;
+    border: 1px solid rgba(229, 62, 62, 0.2);
+}
+
+.card-meta-icon {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    opacity: 0.8;
+}
+
+.card-meta-label {
+    font-weight: var(--font-weight-semibold);
+    opacity: 0.8;
+}
+
+.card-meta-value {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .card-content {
@@ -1394,10 +1475,18 @@ main {
     }
     
     .card-meta {
-        display: flex;
-        flex-wrap: wrap;
         gap: var(--space-2);
+    }
+    
+    .card-meta-item {
         font-size: var(--font-size-xs);
+        padding: 2px var(--space-1);
+        gap: 2px;
+    }
+    
+    .card-meta-icon {
+        width: 10px;
+        height: 10px;
     }
     
     .card-actions {

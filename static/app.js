@@ -389,10 +389,43 @@ class LearningSystem {
                         `}
                     </div>
                     <div class="card-meta">
-                        <span>Created: ${new Date(card.creation_date).toLocaleDateString()}</span>
-                        <span>Reviews: ${card.reps}</span>
-                        <span>State: ${card.state}</span>
-                        ${card.next_review ? `<span>Next: ${new Date(card.next_review).toLocaleDateString()}</span>` : ''}
+                        <div class="card-meta-item created">
+                            <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                <line x1="16" y1="2" x2="16" y2="6"/>
+                                <line x1="8" y1="2" x2="8" y2="6"/>
+                                <line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                            <span class="card-meta-label">Created</span>
+                            <span class="card-meta-value">${new Date(card.creation_date).toLocaleDateString()}</span>
+                        </div>
+                        <div class="card-meta-item reviews">
+                            <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 11H5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-4"/>
+                                <path d="M9 7l3-3 3 3"/>
+                                <path d="M12 4v8"/>
+                            </svg>
+                            <span class="card-meta-label">Reviews</span>
+                            <span class="card-meta-value">${card.reps}</span>
+                        </div>
+                        <div class="card-meta-item state ${card.state.toLowerCase()}">
+                            <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+                            </svg>
+                            <span class="card-meta-label">State</span>
+                            <span class="card-meta-value">${card.state}</span>
+                        </div>
+                        ${card.next_review ? `
+                            <div class="card-meta-item next-review">
+                                <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polyline points="12,6 12,12 16,14"/>
+                                </svg>
+                                <span class="card-meta-label">Next</span>
+                                <span class="card-meta-value">${new Date(card.next_review).toLocaleDateString()}</span>
+                            </div>
+                        ` : ''}
                     </div>
                     <div class="card-actions">
                         <button class="secondary-btn edit-btn" onclick="app.editCard('${card.id}')">Edit</button>
