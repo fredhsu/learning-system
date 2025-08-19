@@ -428,8 +428,12 @@ class LearningSystem {
                         ` : ''}
                     </div>
                     <div class="card-actions">
-                        <button class="secondary-btn edit-btn" onclick="app.editCard('${card.id}')">Edit</button>
-                        <button class="danger-btn delete-btn" onclick="app.deleteCard('${card.id}')">Delete</button>
+                        <button class="icon-btn edit-btn" onclick="app.editCard('${card.id}')" title="Edit card">
+                            <i data-feather="edit"></i>
+                        </button>
+                        <button class="icon-btn delete-btn danger" onclick="app.deleteCard('${card.id}')" title="Delete card">
+                            <i data-feather="trash-2"></i>
+                        </button>
                     </div>
                 </div>
             `;
