@@ -33,6 +33,11 @@ pub struct QuizAnswerRequest {
     pub answer: String,
 }
 
+#[derive(Deserialize)]
+pub struct SearchParams {
+    pub q: Option<String>,
+}
+
 #[derive(Serialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
@@ -133,6 +138,21 @@ pub async fn get_linked_cards(
         Ok(cards) => Ok(Json(ApiResponse::success(cards))),
         Err(e) => {
             eprintln!("Error getting linked cards: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn search_cards(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<ApiResponse<Vec<Card>>>, StatusCode> {
+    let search_query = params.q.as_deref().unwrap_or("");
+    
+    match state.card_service.search_cards(search_query).await {
+        Ok(cards) => Ok(Json(ApiResponse::success(cards))),
+        Err(e) => {
+            eprintln!("Error searching cards: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -253,13 +273,34 @@ pub async fn review_card(
     }
 }
 
+pub async fn delete_card(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApiResponse<bool>>, StatusCode> {
+    match state.card_service.delete_card(id).await {
+        Ok(deleted) => {
+            if deleted {
+                Ok(Json(ApiResponse::success(true)))
+            } else {
+                Err(StatusCode::NOT_FOUND)
+            }
+        }
+        Err(e) => {
+            eprintln!("Error deleting card: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         // Card routes
         .route("/api/cards", post(create_card))
         .route("/api/cards", get(get_all_cards))
+        .route("/api/cards/search", get(search_cards))
         .route("/api/cards/:id", get(get_card))
         .route("/api/cards/:id", put(update_card))
+        .route("/api/cards/:id", delete(delete_card))
         .route("/api/cards/due", get(get_cards_due))
         .route("/api/cards/:id/links", get(get_linked_cards))
         

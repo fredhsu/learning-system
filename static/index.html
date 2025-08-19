@@ -5,16 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Learning System - FSRS Quiz Platform</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
 </head>
 <body>
     <div id="app">
         <header>
             <h1>Learning System</h1>
             <nav>
-                <button id="nav-cards" class="nav-btn active">Cards</button>
-                <button id="nav-review" class="nav-btn">Review</button>
-                <button id="nav-topics" class="nav-btn">Topics</button>
+                <button id="nav-cards" class="nav-btn active">
+                    <i data-feather="layers"></i>
+                    <span>Cards</span>
+                </button>
+                <button id="nav-review" class="nav-btn">
+                    <i data-feather="refresh-cw"></i>
+                    <span>Review</span>
+                </button>
+                <button id="nav-topics" class="nav-btn">
+                    <i data-feather="tag"></i>
+                    <span>Topics</span>
+                </button>
             </nav>
         </header>
 
@@ -23,7 +34,55 @@
             <div id="cards-view" class="view active">
                 <div class="view-header">
                     <h2>Knowledge Cards</h2>
-                    <button id="create-card-btn" class="primary-btn">Create New Card</button>
+                    <div class="search-container">
+                        <input 
+                            type="text" 
+                            id="card-search" 
+                            placeholder="Search cards..." 
+                            class="search-input"
+                        >
+                        <button id="clear-search-btn" class="clear-search-btn" style="display: none;" title="Clear search">&times;</button>
+                    </div>
+                    <button id="create-card-btn" class="primary-btn">
+                        <i data-feather="plus"></i>
+                        <span>Create New Card</span>
+                    </button>
+                </div>
+                
+                <div id="search-results-info" class="search-info" style="display: none;"></div>
+                
+                <!-- Skeleton Loading for Cards -->
+                <div id="cards-skeleton" class="skeleton-container" style="display: none;">
+                    <div class="skeleton-card">
+                        <div class="skeleton-line skeleton-title"></div>
+                        <div class="skeleton-line skeleton-text"></div>
+                        <div class="skeleton-line skeleton-text short"></div>
+                        <div class="skeleton-meta">
+                            <div class="skeleton-badge"></div>
+                            <div class="skeleton-badge"></div>
+                            <div class="skeleton-badge"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-card">
+                        <div class="skeleton-line skeleton-title"></div>
+                        <div class="skeleton-line skeleton-text"></div>
+                        <div class="skeleton-line skeleton-text short"></div>
+                        <div class="skeleton-meta">
+                            <div class="skeleton-badge"></div>
+                            <div class="skeleton-badge"></div>
+                            <div class="skeleton-badge"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-card">
+                        <div class="skeleton-line skeleton-title"></div>
+                        <div class="skeleton-line skeleton-text"></div>
+                        <div class="skeleton-line skeleton-text short"></div>
+                        <div class="skeleton-meta">
+                            <div class="skeleton-badge"></div>
+                            <div class="skeleton-badge"></div>
+                            <div class="skeleton-badge"></div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div id="cards-list"></div>
@@ -35,7 +94,7 @@
                         <h3>Create New Card</h3>
                         <form id="create-card-form">
                             <div class="form-group">
-                                <label for="card-content">Content (supports LaTeX):</label>
+                                <label for="card-content">Content (supports Markdown & LaTeX):</label>
                                 <textarea id="card-content" rows="6" placeholder="Enter your knowledge card content here..."></textarea>
                             </div>
                             <div class="form-group">
@@ -46,7 +105,33 @@
                                 <label for="card-links">Linked Cards (optional):</label>
                                 <input type="text" id="card-links" placeholder="Enter card IDs to link">
                             </div>
-                            <button type="submit" class="primary-btn">Create Card</button>
+                            <button type="submit" class="primary-btn">
+                                <i data-feather="plus-circle"></i>
+                                <span>Create Card</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Edit Card Modal -->
+                <div id="edit-card-modal" class="modal">
+                    <div class="modal-content">
+                        <span class="close">&times;</span>
+                        <h3>Edit Card</h3>
+                        <form id="edit-card-form">
+                            <input type="hidden" id="edit-card-id">
+                            <div class="form-group">
+                                <label for="edit-card-content">Content (supports Markdown & LaTeX):</label>
+                                <textarea id="edit-card-content" rows="6" placeholder="Enter your knowledge card content here..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-card-links">Linked Cards (optional):</label>
+                                <input type="text" id="edit-card-links" placeholder="Enter card IDs to link">
+                            </div>
+                            <button type="submit" class="primary-btn">
+                                <i data-feather="save"></i>
+                                <span>Update Card</span>
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -56,7 +141,21 @@
             <div id="review-view" class="view">
                 <div class="view-header">
                     <h2>Review Session</h2>
-                    <p id="due-count">Loading due cards...</p>
+                    <div class="review-stats">
+                        <p id="due-count">Loading due cards...</p>
+                        <p id="remaining-count" style="display: none;">Remaining: <span id="remaining-number">0</span> cards</p>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div id="review-progress-bar" class="progress-bar-container" style="display: none;">
+                    <div class="progress-bar-header">
+                        <span id="progress-text">Question 1 of 5</span>
+                        <span id="card-progress">Card 1 of 3</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
                 </div>
                 
                 <div id="review-content">
@@ -70,6 +169,32 @@
                         <div id="quiz-questions"></div>
                         <div id="quiz-feedback" class="feedback"></div>
                     </div>
+                    
+                    <!-- Completion Celebration Screen -->
+                    <div id="completion-screen" class="completion-screen" style="display: none;">
+                        <div class="celebration-content">
+                            <div class="celebration-icon">🎉</div>
+                            <h3>Review Complete!</h3>
+                            <div id="session-stats" class="session-statistics">
+                                <div class="stat-item">
+                                    <span class="stat-number" id="cards-reviewed">0</span>
+                                    <span class="stat-label">Cards Reviewed</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-number" id="questions-answered">0</span>
+                                    <span class="stat-label">Questions Answered</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-number" id="correct-percentage">0%</span>
+                                    <span class="stat-label">Correct Answers</span>
+                                </div>
+                            </div>
+                            <button id="new-review-btn" class="primary-btn">
+                                <i data-feather="play"></i>
+                                <span>Start New Review</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -77,7 +202,10 @@
             <div id="topics-view" class="view">
                 <div class="view-header">
                     <h2>Topics</h2>
-                    <button id="create-topic-btn" class="primary-btn">Create Topic</button>
+                    <button id="create-topic-btn" class="primary-btn">
+                        <i data-feather="hash"></i>
+                        <span>Create Topic</span>
+                    </button>
                 </div>
                 
                 <div id="topics-list"></div>
@@ -96,7 +224,10 @@
                                 <label for="topic-description">Description:</label>
                                 <textarea id="topic-description" rows="3" placeholder="Topic description (optional)"></textarea>
                             </div>
-                            <button type="submit" class="primary-btn">Create Topic</button>
+                            <button type="submit" class="primary-btn">
+                                <i data-feather="hash"></i>
+                                <span>Create Topic</span>
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -104,9 +235,78 @@
         </main>
     </div>
 
-    <div id="loading" class="loading">Loading...</div>
-    <div id="error-toast" class="toast error-toast"></div>
+    <!-- Keyboard Shortcuts Help Modal -->
+    <div id="keyboard-help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>
+                <i data-feather="command"></i>
+                <span>Keyboard Shortcuts</span>
+            </h3>
+            <div class="shortcuts-grid">
+                <div class="shortcut-section">
+                    <h4>Review Mode</h4>
+                    <div class="shortcut-item">
+                        <kbd>Space</kbd>
+                        <span>Continue / Submit Answer</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>1</kbd>
+                        <span>Rate: Again</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>2</kbd>
+                        <span>Rate: Hard</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>3</kbd>
+                        <span>Rate: Good</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>4</kbd>
+                        <span>Rate: Easy</span>
+                    </div>
+                </div>
+                <div class="shortcut-section">
+                    <h4>General</h4>
+                    <div class="shortcut-item">
+                        <kbd>?</kbd>
+                        <span>Show this help</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Esc</kbd>
+                        <span>Close modal / Cancel</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <!-- Enhanced Loading Spinner -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner">
+                <div class="spinner-circle"></div>
+                <div class="spinner-circle"></div>
+                <div class="spinner-circle"></div>
+            </div>
+            <p class="loading-text">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+    
+    <!-- Floating keyboard shortcut indicator -->
+    <div id="keyboard-indicator" class="keyboard-indicator" title="Press ? for keyboard shortcuts">
+        <i data-feather="command"></i>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.js"></script>
     <script src="app.js"></script>
+    <script>
+        // Initialize Feather icons after page load
+        feather.replace();
+    </script>
 </body>
 </html>

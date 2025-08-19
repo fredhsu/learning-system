@@ -3,7 +3,65 @@ class LearningSystem {
         this.baseURL = '/api';
         this.currentView = 'cards';
         this.currentQuiz = null;
+        this.searchDebounceTimer = null;
+        this.currentSearchQuery = '';
+        this.allCards = [];
+        this.reviewSession = {
+            totalCards: 0,
+            currentCardIndex: 0,
+            totalQuestions: 0,
+            correctAnswers: 0,
+            startTime: null,
+            dueCards: []
+        };
         this.init();
+    }
+
+    renderMarkdown(content) {
+        if (typeof marked !== 'undefined') {
+            return marked.parse(content);
+        }
+        return content.replace(/\n/g, '<br>');
+    }
+
+    createPreviewContent(content) {
+        const plainTextContent = content.replace(/[#*_`~\[\]()]/g, '').substring(0, 100);
+        if (typeof marked !== 'undefined') {
+            return marked.parse(plainTextContent);
+        }
+        return plainTextContent.replace(/\n/g, '<br>');
+    }
+
+    toggleCardPreview(cardId) {
+        const previewElement = document.querySelector(`[data-full-id="${cardId}"].card-preview`);
+        const fullElement = document.querySelector(`[data-full-id="${cardId}"].card-full`);
+        const toggleButton = document.querySelector(`[data-card-id="${cardId}"]`);
+        const toggleText = toggleButton.querySelector('.toggle-text');
+        const toggleIcon = toggleButton.querySelector('.toggle-icon');
+        
+        const isCurrentlyPreview = previewElement.style.display !== 'none';
+        
+        if (isCurrentlyPreview) {
+            // Show full content
+            previewElement.style.display = 'none';
+            fullElement.style.display = 'block';
+            toggleText.textContent = 'Show Less';
+            toggleIcon.textContent = '▲';
+            toggleButton.classList.add('expanded');
+        } else {
+            // Show preview
+            previewElement.style.display = 'block';
+            fullElement.style.display = 'none';
+            toggleText.textContent = 'Show More';
+            toggleIcon.textContent = '▼';
+            toggleButton.classList.remove('expanded');
+        }
+        
+        // Re-render MathJax if available
+        if (window.MathJax) {
+            const activeElement = isCurrentlyPreview ? fullElement : previewElement;
+            MathJax.typesetPromise([activeElement]).catch((err) => console.log(err.message));
+        }
     }
 
     async init() {
@@ -22,10 +80,14 @@ class LearningSystem {
         // Card management
         document.getElementById('create-card-btn').addEventListener('click', () => this.showModal('create-card-modal'));
         document.getElementById('create-card-form').addEventListener('submit', (e) => this.handleCreateCard(e));
+        document.getElementById('edit-card-form').addEventListener('submit', (e) => this.handleEditCard(e));
 
         // Topic management
         document.getElementById('create-topic-btn').addEventListener('click', () => this.showModal('create-topic-modal'));
         document.getElementById('create-topic-form').addEventListener('submit', (e) => this.handleCreateTopic(e));
+
+        // Review completion
+        document.getElementById('new-review-btn').addEventListener('click', () => this.startNewReview());
 
         // Modal close buttons
         document.querySelectorAll('.close').forEach(closeBtn => {
@@ -38,6 +100,14 @@ class LearningSystem {
                 if (e.target === modal) this.closeModal(modal);
             });
         });
+
+        // Search functionality
+        document.getElementById('card-search').addEventListener('input', (e) => this.handleSearchInput(e));
+        document.getElementById('clear-search-btn').addEventListener('click', () => this.clearSearch());
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
+        document.getElementById('keyboard-indicator').addEventListener('click', () => this.showKeyboardHelp());
     }
 
     switchView(viewName) {
@@ -65,19 +135,99 @@ class LearningSystem {
         modal.classList.remove('active');
     }
 
-    showLoading() {
-        document.getElementById('loading').style.display = 'block';
+    showLoading(message = 'Loading...') {
+        const loading = document.getElementById('loading');
+        const loadingText = loading.querySelector('.loading-text');
+        loadingText.textContent = message;
+        loading.classList.add('show');
     }
 
     hideLoading() {
-        document.getElementById('loading').style.display = 'none';
+        const loading = document.getElementById('loading');
+        loading.classList.remove('show');
+    }
+
+    showSkeleton(containerId) {
+        const skeleton = document.getElementById(`${containerId}-skeleton`);
+        const content = document.getElementById(containerId);
+        if (skeleton) {
+            skeleton.style.display = 'block';
+            content.style.display = 'none';
+        }
+    }
+
+    hideSkeleton(containerId) {
+        const skeleton = document.getElementById(`${containerId}-skeleton`);
+        const content = document.getElementById(containerId);
+        if (skeleton) {
+            skeleton.style.display = 'none';
+            content.style.display = 'block';
+        }
+    }
+
+    showToast(message, type = 'info', duration = 5000) {
+        const container = document.getElementById('toast-container');
+        const toastId = 'toast-' + Date.now();
+        
+        const iconMap = {
+            success: 'check-circle',
+            error: 'x-circle',
+            warning: 'alert-triangle',
+            info: 'info'
+        };
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.id = toastId;
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <i data-feather="${iconMap[type]}"></i>
+            </div>
+            <span>${message}</span>
+            <button class="toast-close" onclick="app.closeToast('${toastId}')">&times;</button>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Initialize feather icons for the toast
+        if (window.feather) {
+            feather.replace();
+        }
+        
+        // Auto-remove toast after duration
+        setTimeout(() => {
+            this.closeToast(toastId);
+        }, duration);
+        
+        return toastId;
+    }
+
+    closeToast(toastId) {
+        const toast = document.getElementById(toastId);
+        if (toast) {
+            toast.style.animation = 'toastSlideOut 0.3s ease-out forwards';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }
     }
 
     showError(message) {
-        const toast = document.getElementById('error-toast');
-        toast.textContent = message;
-        toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 5000);
+        this.showToast(message, 'error');
+    }
+
+    showSuccess(message) {
+        this.showToast(message, 'success');
+    }
+
+    showWarning(message) {
+        this.showToast(message, 'warning');
+    }
+
+    showInfo(message) {
+        this.showToast(message, 'info');
     }
 
     async apiCall(endpoint, options = {}) {
@@ -106,43 +256,160 @@ class LearningSystem {
         }
     }
 
+    handleSearchInput(event) {
+        const searchQuery = event.target.value;
+        const clearButton = document.getElementById('clear-search-btn');
+        
+        // Show/hide clear button
+        if (searchQuery.trim()) {
+            clearButton.style.display = 'block';
+        } else {
+            clearButton.style.display = 'none';
+        }
+        
+        // Clear existing debounce timer
+        if (this.searchDebounceTimer) {
+            clearTimeout(this.searchDebounceTimer);
+        }
+        
+        // Set new debounce timer
+        this.searchDebounceTimer = setTimeout(() => {
+            this.performSearch(searchQuery);
+        }, 300);
+    }
+
+    clearSearch() {
+        const searchInput = document.getElementById('card-search');
+        const clearButton = document.getElementById('clear-search-btn');
+        const searchInfo = document.getElementById('search-results-info');
+        
+        searchInput.value = '';
+        clearButton.style.display = 'none';
+        searchInfo.style.display = 'none';
+        
+        this.currentSearchQuery = '';
+        this.loadCards();
+    }
+
+    async performSearch(searchQuery) {
+        this.currentSearchQuery = searchQuery;
+        
+        try {
+            const cards = await this.searchCards(searchQuery);
+            this.renderCards(cards, searchQuery);
+            this.updateSearchInfo(cards.length, searchQuery);
+        } catch (error) {
+            this.showError('Failed to search cards');
+        }
+    }
+
+    async searchCards(searchQuery) {
+        const endpoint = searchQuery.trim() 
+            ? `/cards/search?q=${encodeURIComponent(searchQuery)}` 
+            : '/cards';
+        return await this.apiCall(endpoint);
+    }
+
+    updateSearchInfo(resultsCount, searchQuery) {
+        const searchInfo = document.getElementById('search-results-info');
+        
+        if (searchQuery.trim()) {
+            searchInfo.style.display = 'block';
+            searchInfo.textContent = `Found ${resultsCount} card${resultsCount !== 1 ? 's' : ''} for "${searchQuery}"`;
+        } else {
+            searchInfo.style.display = 'none';
+        }
+    }
+
+    highlightSearchTerm(text, searchTerm) {
+        if (!searchTerm || !searchTerm.trim()) {
+            return text;
+        }
+        
+        const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        return text.replace(regex, '<span class="search-highlight">$1</span>');
+    }
+
     async loadCards() {
         try {
+            // Show skeleton loading
+            this.showSkeleton('cards-list');
+            
             const cards = await this.apiCall('/cards');
+            this.allCards = cards;
+            
+            // Hide skeleton and show cards
+            this.hideSkeleton('cards-list');
             this.renderCards(cards);
         } catch (error) {
+            this.hideSkeleton('cards-list');
             this.showError('Failed to load cards');
         }
     }
 
-    renderCards(cards) {
+    renderCards(cards, searchQuery = '') {
         const container = document.getElementById('cards-list');
         
         if (cards.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <h3>No cards yet</h3>
-                    <p>Create your first knowledge card to get started!</p>
-                </div>
-            `;
+            const emptyMessage = searchQuery.trim() 
+                ? `<h3>No cards found</h3><p>No cards match your search for "${searchQuery}"</p>`
+                : `<h3>No cards yet</h3><p>Create your first knowledge card to get started!</p>`;
+                
+            container.innerHTML = `<div class="empty-state">${emptyMessage}</div>`;
             return;
         }
 
-        container.innerHTML = cards.map(card => `
-            <div class="card" data-id="${card.id}">
-                <div class="card-content">${card.content}</div>
-                <div class="card-meta">
-                    <span>Created: ${new Date(card.creation_date).toLocaleDateString()}</span>
-                    <span>Reviews: ${card.reps}</span>
-                    <span>State: ${card.state}</span>
-                    ${card.next_review ? `<span>Next: ${new Date(card.next_review).toLocaleDateString()}</span>` : ''}
+        container.innerHTML = cards.map(card => {
+            // Apply highlighting to card content before rendering markdown
+            const highlightedContent = searchQuery.trim() 
+                ? this.highlightSearchTerm(card.content, searchQuery)
+                : card.content;
+                
+            const fullContent = this.renderMarkdown(highlightedContent);
+            const previewContent = this.createPreviewContent(highlightedContent);
+            const needsPreview = card.content.length > 100;
+            
+            return `
+                <div class="card" data-id="${card.id}">
+                    <div class="card-content-wrapper">
+                        ${needsPreview ? `
+                            <div class="card-content card-preview" data-full-id="${card.id}">
+                                ${previewContent}
+                                <span class="preview-ellipsis">...</span>
+                            </div>
+                            <div class="card-content card-full" data-full-id="${card.id}" style="display: none;">
+                                ${fullContent}
+                            </div>
+                            <button class="preview-toggle-btn" data-card-id="${card.id}" onclick="app.toggleCardPreview('${card.id}')">
+                                <span class="toggle-text">Show More</span>
+                                <span class="toggle-icon">▼</span>
+                            </button>
+                        ` : `
+                            <div class="card-content">${fullContent}</div>
+                        `}
+                    </div>
+                    <div class="card-meta">
+                        <span>Created: ${new Date(card.creation_date).toLocaleDateString()}</span>
+                        <span>Reviews: ${card.reps}</span>
+                        <span>State: ${card.state}</span>
+                        ${card.next_review ? `<span>Next: ${new Date(card.next_review).toLocaleDateString()}</span>` : ''}
+                    </div>
+                    <div class="card-actions">
+                        <button class="secondary-btn edit-btn" onclick="app.editCard('${card.id}')">Edit</button>
+                        <button class="danger-btn delete-btn" onclick="app.deleteCard('${card.id}')">Delete</button>
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
         // Add MathJax rendering if available
         if (window.MathJax) {
             MathJax.typesetPromise([container]).catch((err) => console.log(err.message));
+        }
+        
+        // Re-initialize Feather icons for new content
+        if (window.feather) {
+            feather.replace();
         }
     }
 
@@ -203,8 +470,15 @@ class LearningSystem {
             e.target.reset();
             this.closeModal(document.getElementById('create-card-modal'));
             
-            // Reload cards
-            await this.loadCards();
+            // Show success message
+            this.showSuccess('Card created successfully!');
+            
+            // Reload cards with current search
+            if (this.currentSearchQuery) {
+                await this.performSearch(this.currentSearchQuery);
+            } else {
+                await this.loadCards();
+            }
         } catch (error) {
             this.showError('Failed to create card');
         }
@@ -226,6 +500,9 @@ class LearningSystem {
             e.target.reset();
             this.closeModal(document.getElementById('create-topic-modal'));
             
+            // Show success message
+            this.showSuccess('Topic created successfully!');
+            
             // Reload topics
             await this.loadTopics();
         } catch (error) {
@@ -237,14 +514,29 @@ class LearningSystem {
         try {
             const dueCards = await this.apiCall('/cards/due');
             
+            // Initialize review session data
+            this.reviewSession = {
+                totalCards: dueCards.length,
+                currentCardIndex: 0,
+                totalQuestions: 0,
+                correctAnswers: 0,
+                startTime: new Date(),
+                dueCards: dueCards
+            };
+            
             document.getElementById('due-count').textContent = `${dueCards.length} cards due for review`;
             
             if (dueCards.length === 0) {
                 document.getElementById('no-reviews').style.display = 'block';
                 document.getElementById('quiz-container').style.display = 'none';
+                document.getElementById('review-progress-bar').style.display = 'none';
+                document.getElementById('remaining-count').style.display = 'none';
             } else {
                 document.getElementById('no-reviews').style.display = 'none';
                 document.getElementById('quiz-container').style.display = 'block';
+                document.getElementById('review-progress-bar').style.display = 'block';
+                document.getElementById('remaining-count').style.display = 'block';
+                this.updateRemainingCount();
                 await this.startQuiz(dueCards[0]);
             }
         } catch (error) {
@@ -254,16 +546,30 @@ class LearningSystem {
 
     async startQuiz(card) {
         try {
-            // Display the card content
-            document.getElementById('card-content-display').innerHTML = `
+            // Display the card content with transition
+            const cardDisplay = document.getElementById('card-content-display');
+            cardDisplay.classList.add('quiz-transition');
+            
+            cardDisplay.innerHTML = `
                 <h3>Review Card</h3>
-                <div class="card-content">${card.content}</div>
+                <div class="card-content">${this.renderMarkdown(card.content)}</div>
                 <p class="card-meta">Next review: ${new Date(card.next_review).toLocaleDateString()}</p>
             `;
+
+            // Add MathJax rendering if available
+            if (window.MathJax) {
+                MathJax.typesetPromise([cardDisplay]).catch((err) => console.log(err.message));
+            }
+
+            // Trigger fade-in animation
+            setTimeout(() => {
+                cardDisplay.classList.add('fade-in');
+            }, 50);
 
             // Generate quiz questions
             const questions = await this.apiCall(`/cards/${card.id}/quiz`);
             this.currentQuiz = { card, questions, currentQuestion: 0 };
+            this.updateProgressIndicators();
             this.renderQuestion();
         } catch (error) {
             this.showError('Failed to generate quiz');
@@ -275,6 +581,7 @@ class LearningSystem {
         const question = questions[currentQuestion];
         
         const container = document.getElementById('quiz-questions');
+        container.classList.add('quiz-transition');
         
         let questionHTML = `
             <div class="question">
@@ -286,7 +593,7 @@ class LearningSystem {
             questionHTML += `
                 <div class="options">
                     ${question.options.map((option, index) => `
-                        <div class="option" data-option="${String.fromCharCode(65 + index)}">
+                        <div class="option" data-option="${String.fromCharCode(65 + index)}" data-option-text="${option}">
                             ${String.fromCharCode(65 + index)}. ${option}
                         </div>
                     `).join('')}
@@ -303,13 +610,37 @@ class LearningSystem {
         questionHTML += '</div>';
         container.innerHTML = questionHTML;
 
+        // Update progress indicators
+        this.updateProgressIndicators();
+
+        // Trigger fade-in animation
+        setTimeout(() => {
+            container.classList.add('fade-in');
+        }, 50);
+
         // Add click listeners for multiple choice options
         document.querySelectorAll('.option').forEach(option => {
             option.addEventListener('click', () => {
                 document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
                 option.classList.add('selected');
+                // Add visual feedback
+                const questionElement = document.querySelector('.question');
+                questionElement.classList.add('answering');
             });
         });
+
+        // Add typing listener for short answer
+        const shortAnswerField = document.querySelector('.short-answer');
+        if (shortAnswerField) {
+            shortAnswerField.addEventListener('input', () => {
+                const questionElement = document.querySelector('.question');
+                if (shortAnswerField.value.trim()) {
+                    questionElement.classList.add('answering');
+                } else {
+                    questionElement.classList.remove('answering');
+                }
+            });
+        }
     }
 
     async submitAnswer() {
@@ -323,7 +654,7 @@ class LearningSystem {
                 this.showError('Please select an answer');
                 return;
             }
-            answer = selected.dataset.option;
+            answer = selected.dataset.optionText;
         } else {
             answer = document.querySelector('.short-answer').value.trim();
             if (!answer) {
@@ -331,6 +662,11 @@ class LearningSystem {
                 return;
             }
         }
+
+        // Disable submit button to prevent double submission
+        const submitButton = document.querySelector('.primary-btn');
+        submitButton.disabled = true;
+        submitButton.textContent = 'Submitting...';
 
         try {
             const result = await this.apiCall(`/cards/${card.id}/quiz/answer`, {
@@ -344,23 +680,50 @@ class LearningSystem {
             this.showFeedback(result.grading, question);
         } catch (error) {
             this.showError('Failed to submit answer');
+            // Re-enable button on error
+            submitButton.disabled = false;
+            submitButton.textContent = 'Submit Answer';
         }
     }
 
     showFeedback(grading, question) {
         const feedbackContainer = document.getElementById('quiz-feedback');
         
+        // Update statistics
+        this.reviewSession.totalQuestions++;
+        if (grading.is_correct) {
+            this.reviewSession.correctAnswers++;
+        }
+
+        // Add visual feedback to options if multiple choice
+        if (question.question_type === 'multiple_choice') {
+            const selectedOption = document.querySelector('.option.selected');
+            const allOptions = document.querySelectorAll('.option');
+            
+            // Find correct option
+            allOptions.forEach(option => {
+                if (option.dataset.optionText === question.correct_answer) {
+                    option.classList.add('correct-flash');
+                }
+            });
+            
+            // Highlight incorrect selection if wrong
+            if (selectedOption && !grading.is_correct) {
+                selectedOption.classList.add('incorrect-flash');
+            }
+        }
+        
         feedbackContainer.innerHTML = `
-            <div class="feedback ${grading.is_correct ? 'correct' : 'incorrect'}">
+            <div class="feedback ${grading.is_correct ? 'correct' : 'incorrect'} feedback-transition">
                 <h4>${grading.is_correct ? 'Correct!' : 'Incorrect'}</h4>
                 <p>${grading.feedback}</p>
                 ${question.correct_answer ? `<p><strong>Correct answer:</strong> ${question.correct_answer}</p>` : ''}
             </div>
             <div class="rating-buttons">
-                <button class="rating-btn again" onclick="app.rateCard(1)">Again</button>
-                <button class="rating-btn hard" onclick="app.rateCard(2)">Hard</button>
-                <button class="rating-btn good" onclick="app.rateCard(3)">Good</button>
-                <button class="rating-btn easy" onclick="app.rateCard(4)">Easy</button>
+                <button class="rating-btn again rating-btn-with-shortcut" data-shortcut="1" onclick="app.rateCard(1)">Again</button>
+                <button class="rating-btn hard rating-btn-with-shortcut" data-shortcut="2" onclick="app.rateCard(2)">Hard</button>
+                <button class="rating-btn good rating-btn-with-shortcut" data-shortcut="3" onclick="app.rateCard(3)">Good</button>
+                <button class="rating-btn easy rating-btn-with-shortcut" data-shortcut="4" onclick="app.rateCard(4)">Easy</button>
             </div>
         `;
     }
@@ -377,14 +740,120 @@ class LearningSystem {
             // Move to next question or end quiz
             this.currentQuiz.currentQuestion++;
             if (this.currentQuiz.currentQuestion < this.currentQuiz.questions.length) {
+                // Clear feedback and animations
                 document.getElementById('quiz-feedback').innerHTML = '';
+                document.querySelectorAll('.option').forEach(option => {
+                    option.classList.remove('correct-flash', 'incorrect-flash', 'selected');
+                });
+                document.querySelector('.question').classList.remove('answering');
+                document.getElementById('quiz-questions').classList.remove('fade-in');
+                
                 this.renderQuestion();
             } else {
-                // Quiz completed, load next review session
-                await this.loadReviewSession();
+                // Card completed, move to next card or end session
+                this.reviewSession.currentCardIndex++;
+                this.updateRemainingCount();
+                
+                if (this.reviewSession.currentCardIndex < this.reviewSession.totalCards) {
+                    // Start next card
+                    const nextCard = this.reviewSession.dueCards[this.reviewSession.currentCardIndex];
+                    document.getElementById('quiz-feedback').innerHTML = '';
+                    document.getElementById('card-content-display').classList.remove('fade-in');
+                    document.getElementById('quiz-questions').classList.remove('fade-in');
+                    await this.startQuiz(nextCard);
+                } else {
+                    // All cards completed - show celebration
+                    this.showCompletionScreen();
+                }
             }
         } catch (error) {
             this.showError('Failed to record rating');
+        }
+    }
+
+    async editCard(cardId) {
+        try {
+            const card = await this.apiCall(`/cards/${cardId}`);
+            
+            // Populate edit form
+            document.getElementById('edit-card-id').value = card.id;
+            document.getElementById('edit-card-content').value = card.content;
+            
+            // Parse links if they exist
+            if (card.links) {
+                try {
+                    const links = JSON.parse(card.links);
+                    document.getElementById('edit-card-links').value = links.join(', ');
+                } catch (e) {
+                    document.getElementById('edit-card-links').value = '';
+                }
+            } else {
+                document.getElementById('edit-card-links').value = '';
+            }
+            
+            this.showModal('edit-card-modal');
+        } catch (error) {
+            this.showError('Failed to load card for editing');
+        }
+    }
+
+    async handleEditCard(e) {
+        e.preventDefault();
+        
+        const cardId = document.getElementById('edit-card-id').value;
+        const content = document.getElementById('edit-card-content').value;
+        const linksText = document.getElementById('edit-card-links').value;
+
+        const updateData = {
+            content: content || null,
+            links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
+        };
+
+        try {
+            await this.apiCall(`/cards/${cardId}`, {
+                method: 'PUT',
+                body: JSON.stringify(updateData)
+            });
+
+            // Reset form and close modal
+            e.target.reset();
+            this.closeModal(document.getElementById('edit-card-modal'));
+            
+            // Show success message
+            this.showSuccess('Card updated successfully!');
+            
+            // Reload cards with current search
+            if (this.currentSearchQuery) {
+                await this.performSearch(this.currentSearchQuery);
+            } else {
+                await this.loadCards();
+            }
+        } catch (error) {
+            this.showError('Failed to update card');
+        }
+    }
+
+    async deleteCard(cardId) {
+        if (!confirm('Are you sure you want to delete this card? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            await this.apiCall(`/cards/${cardId}`, {
+                method: 'DELETE'
+            });
+
+            // Show success message
+            this.showSuccess('Card deleted successfully!');
+
+            // Reload cards with current search
+            if (this.currentSearchQuery) {
+                await this.performSearch(this.currentSearchQuery);
+            } else {
+                await this.loadCards();
+            }
+        } catch (error) {
+            this.showError('Failed to delete card');
         }
     }
 
@@ -393,6 +862,159 @@ class LearningSystem {
         if (window.MathJax) {
             MathJax.typesetPromise([element]).catch((err) => console.log(err.message));
         }
+    }
+
+    // Keyboard shortcuts handler
+    handleKeyboardShortcuts(event) {
+        // Don't handle shortcuts when typing in input fields
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        const key = event.key;
+        const isReviewMode = this.currentView === 'review' && this.currentQuiz;
+
+        switch (key) {
+            case '?':
+                event.preventDefault();
+                this.showKeyboardHelp();
+                break;
+            
+            case 'Escape':
+                event.preventDefault();
+                this.handleEscapeKey();
+                break;
+            
+            case ' ':
+            case 'Spacebar':
+                if (isReviewMode) {
+                    event.preventDefault();
+                    this.handleSpacebarInReview();
+                }
+                break;
+            
+            case '1':
+                if (isReviewMode && this.isInRatingMode()) {
+                    event.preventDefault();
+                    this.rateCard(1);
+                }
+                break;
+            
+            case '2':
+                if (isReviewMode && this.isInRatingMode()) {
+                    event.preventDefault();
+                    this.rateCard(2);
+                }
+                break;
+            
+            case '3':
+                if (isReviewMode && this.isInRatingMode()) {
+                    event.preventDefault();
+                    this.rateCard(3);
+                }
+                break;
+            
+            case '4':
+                if (isReviewMode && this.isInRatingMode()) {
+                    event.preventDefault();
+                    this.rateCard(4);
+                }
+                break;
+        }
+    }
+
+    showKeyboardHelp() {
+        this.showModal('keyboard-help-modal');
+        
+        // Re-initialize Feather icons for the modal
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    handleEscapeKey() {
+        // Close any open modal
+        const openModals = document.querySelectorAll('.modal.active');
+        if (openModals.length > 0) {
+            openModals.forEach(modal => this.closeModal(modal));
+        }
+    }
+
+    handleSpacebarInReview() {
+        // Check if we're in question mode (submit button available)
+        const submitButton = document.querySelector('.primary-btn:not(.rating-btn)');
+        if (submitButton && submitButton.textContent.includes('Submit')) {
+            this.submitAnswer();
+        }
+    }
+
+    isInRatingMode() {
+        // Check if rating buttons are currently visible
+        const ratingButtons = document.querySelector('.rating-buttons');
+        return ratingButtons && ratingButtons.style.display !== 'none';
+    }
+
+    // Progress indicator methods
+    updateProgressIndicators() {
+        if (!this.currentQuiz) return;
+        
+        const { questions, currentQuestion } = this.currentQuiz;
+        const totalQuestions = questions.length;
+        const currentQuestionNumber = currentQuestion + 1;
+        const currentCardNumber = this.reviewSession.currentCardIndex + 1;
+        const totalCards = this.reviewSession.totalCards;
+        
+        // Update question progress
+        document.getElementById('progress-text').textContent = `Question ${currentQuestionNumber} of ${totalQuestions}`;
+        document.getElementById('card-progress').textContent = `Card ${currentCardNumber} of ${totalCards}`;
+        
+        // Update progress bar
+        const overallProgress = ((this.reviewSession.currentCardIndex * totalQuestions + currentQuestion) / (totalCards * totalQuestions)) * 100;
+        document.getElementById('progress-fill').style.width = `${overallProgress}%`;
+    }
+
+    updateRemainingCount() {
+        const remaining = this.reviewSession.totalCards - this.reviewSession.currentCardIndex;
+        document.getElementById('remaining-number').textContent = remaining;
+        
+        if (remaining === 0) {
+            document.getElementById('remaining-count').style.display = 'none';
+        } else {
+            document.getElementById('remaining-count').style.display = 'block';
+        }
+    }
+
+    showCompletionScreen() {
+        // Calculate session statistics
+        const cardsReviewed = this.reviewSession.totalCards;
+        const questionsAnswered = this.reviewSession.totalQuestions;
+        const correctPercentage = questionsAnswered > 0 
+            ? Math.round((this.reviewSession.correctAnswers / questionsAnswered) * 100)
+            : 0;
+        
+        // Update statistics display
+        document.getElementById('cards-reviewed').textContent = cardsReviewed;
+        document.getElementById('questions-answered').textContent = questionsAnswered;
+        document.getElementById('correct-percentage').textContent = `${correctPercentage}%`;
+        
+        // Show completion screen
+        document.getElementById('completion-screen').style.display = 'flex';
+        
+        // Hide other elements
+        document.getElementById('quiz-container').style.display = 'none';
+        document.getElementById('review-progress-bar').style.display = 'none';
+    }
+
+    async startNewReview() {
+        // Hide completion screen
+        document.getElementById('completion-screen').style.display = 'none';
+        
+        // Reset animations and transitions
+        document.getElementById('card-content-display').classList.remove('quiz-transition', 'fade-in');
+        document.getElementById('quiz-questions').classList.remove('quiz-transition', 'fade-in');
+        
+        // Load new review session
+        await this.loadReviewSession();
     }
 }
 

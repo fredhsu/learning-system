@@ -1,4 +1,4 @@
-use learning_system::{Database, CardService, CreateCardRequest};
+use learning_system::{Database, CardService, CreateCardRequest, UpdateCardRequest};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -98,4 +98,363 @@ async fn test_review_workflow() {
     let reviewed_card = reviewed_card.unwrap();
     assert!(reviewed_card.next_review > card.next_review);
     assert_eq!(reviewed_card.reps, 1);
+}
+
+#[tokio::test]
+async fn test_card_update() {
+    use learning_system::UpdateCardRequest;
+
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    let create_request = CreateCardRequest {
+        content: "Original content".to_string(),
+        topic_ids: vec![],
+        links: None,
+    };
+
+    let card = card_service.create_card(create_request).await.unwrap();
+    assert_eq!(card.content, "Original content");
+    assert!(card.links.is_none());
+
+    // Test updating content
+    let update_request = UpdateCardRequest {
+        content: Some("Updated content".to_string()),
+        topic_ids: None,
+        links: Some(vec![Uuid::new_v4()]),
+    };
+
+    let updated_card = card_service.update_card(card.id, update_request).await.unwrap();
+    assert!(updated_card.is_some());
+    
+    let updated_card = updated_card.unwrap();
+    assert_eq!(updated_card.content, "Updated content");
+    assert!(updated_card.links.is_some());
+    
+    // Verify the card was actually updated in the database
+    let retrieved_card = card_service.get_card(card.id).await.unwrap();
+    assert!(retrieved_card.is_some());
+    assert_eq!(retrieved_card.unwrap().content, "Updated content");
+}
+
+#[tokio::test]
+async fn test_card_update_nonexistent() {
+    use learning_system::UpdateCardRequest;
+
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    let fake_id = Uuid::new_v4();
+    let update_request = UpdateCardRequest {
+        content: Some("This should fail".to_string()),
+        topic_ids: None,
+        links: None,
+    };
+
+    let result = card_service.update_card(fake_id, update_request).await.unwrap();
+    assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn test_card_deletion() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    let create_request = CreateCardRequest {
+        content: "Card to be deleted".to_string(),
+        topic_ids: vec![],
+        links: None,
+    };
+
+    let card = card_service.create_card(create_request).await.unwrap();
+    
+    // Verify card exists
+    let retrieved_card = card_service.get_card(card.id).await.unwrap();
+    assert!(retrieved_card.is_some());
+
+    // Delete the card
+    let deleted = card_service.delete_card(card.id).await.unwrap();
+    assert!(deleted);
+
+    // Verify card no longer exists
+    let retrieved_card = card_service.get_card(card.id).await.unwrap();
+    assert!(retrieved_card.is_none());
+
+    // Verify it's not in the list of all cards
+    let all_cards = card_service.get_all_cards().await.unwrap();
+    assert!(!all_cards.iter().any(|c| c.id == card.id));
+}
+
+#[tokio::test]
+async fn test_card_deletion_nonexistent() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    let fake_id = Uuid::new_v4();
+    let deleted = card_service.delete_card(fake_id).await.unwrap();
+    assert!(!deleted);
+}
+
+#[tokio::test]
+async fn test_database_card_operations() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+
+    let create_request = CreateCardRequest {
+        content: "Direct database test".to_string(),
+        topic_ids: vec![],
+        links: Some(vec![Uuid::new_v4()]),
+    };
+
+    // Test direct database creation
+    let card = db.create_card(create_request).await.unwrap();
+    assert_eq!(card.content, "Direct database test");
+    assert!(card.links.is_some());
+
+    // Test direct database retrieval
+    let retrieved = db.get_card(card.id).await.unwrap();
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.as_ref().unwrap().content, "Direct database test");
+
+    // Test direct database update
+    let mut updated_card = card.clone();
+    updated_card.content = "Updated direct database test".to_string();
+    updated_card.links = None;
+
+    db.update_card_content(&updated_card).await.unwrap();
+
+    let retrieved_after_update = db.get_card(card.id).await.unwrap();
+    assert!(retrieved_after_update.is_some());
+    assert_eq!(retrieved_after_update.as_ref().unwrap().content, "Updated direct database test");
+    assert!(retrieved_after_update.as_ref().unwrap().links.is_none());
+
+    // Test direct database deletion
+    let deleted = db.delete_card(card.id).await.unwrap();
+    assert!(deleted);
+
+    let retrieved_after_delete = db.get_card(card.id).await.unwrap();
+    assert!(retrieved_after_delete.is_none());
+}
+
+#[tokio::test]
+async fn test_card_links_functionality() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create first card
+    let card1 = card_service.create_card(CreateCardRequest {
+        content: "Card 1".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Create second card
+    let card2 = card_service.create_card(CreateCardRequest {
+        content: "Card 2".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Update first card to link to second card
+    let update_request = UpdateCardRequest {
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card2.id]),
+    };
+
+    let updated_card1 = card_service.update_card(card1.id, update_request).await.unwrap();
+    assert!(updated_card1.is_some());
+
+    // Test getting linked cards
+    let linked_cards = card_service.get_linked_cards(card1.id).await.unwrap();
+    assert_eq!(linked_cards.len(), 1);
+    assert_eq!(linked_cards[0].id, card2.id);
+    assert_eq!(linked_cards[0].content, "Card 2");
+}
+
+#[tokio::test]
+async fn test_multiple_card_operations() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create multiple cards
+    let mut card_ids = Vec::new();
+    for i in 1..=5 {
+        let create_request = CreateCardRequest {
+            content: format!("Test card {}", i),
+            topic_ids: vec![],
+            links: None,
+        };
+        let card = card_service.create_card(create_request).await.unwrap();
+        card_ids.push(card.id);
+    }
+
+    // Verify all cards exist
+    let all_cards = card_service.get_all_cards().await.unwrap();
+    assert_eq!(all_cards.len(), 5);
+
+    // Update some cards
+    for (i, &card_id) in card_ids.iter().enumerate() {
+        if i % 2 == 0 {
+            let update_request = UpdateCardRequest {
+                content: Some(format!("Updated test card {}", i + 1)),
+                topic_ids: None,
+                links: None,
+            };
+            let updated = card_service.update_card(card_id, update_request).await.unwrap();
+            assert!(updated.is_some());
+        }
+    }
+
+    // Delete some cards
+    for (i, &card_id) in card_ids.iter().enumerate() {
+        if i % 3 == 0 {
+            let deleted = card_service.delete_card(card_id).await.unwrap();
+            assert!(deleted);
+        }
+    }
+
+    // Verify final state
+    let remaining_cards = card_service.get_all_cards().await.unwrap();
+    assert_eq!(remaining_cards.len(), 3); // 5 - 2 deleted = 3
+
+    // Verify deleted cards don't exist
+    for (i, &card_id) in card_ids.iter().enumerate() {
+        if i % 3 == 0 {
+            let card = card_service.get_card(card_id).await.unwrap();
+            assert!(card.is_none());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_search_functionality() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create multiple cards with different content
+    let cards_data = vec![
+        ("Mathematics formulas and physics: $E = mc^2$", "math, physics"),
+        ("Programming concepts in Rust", "programming, rust"),
+        ("History of ancient civilizations", "history"),
+        ("Mathematics and programming intersection", "math, programming"),
+        ("Physics concepts and formulas", "physics"),
+    ];
+
+    let mut created_card_ids = Vec::new();
+    for (content, _topics) in &cards_data {
+        let create_request = CreateCardRequest {
+            content: content.to_string(),
+            topic_ids: vec![],
+            links: None,
+        };
+        let card = card_service.create_card(create_request).await.unwrap();
+        created_card_ids.push(card.id);
+    }
+
+    // Test search functionality
+    let search_results = card_service.search_cards("mathematics").await.unwrap();
+    assert_eq!(search_results.len(), 2); // Should find 2 cards with "mathematics"
+
+    let search_results = card_service.search_cards("programming").await.unwrap();
+    assert_eq!(search_results.len(), 2); // Should find 2 cards with "programming"
+
+    let search_results = card_service.search_cards("physics").await.unwrap();
+    assert_eq!(search_results.len(), 2); // Should find 2 cards with "physics"
+
+    let search_results = card_service.search_cards("nonexistent").await.unwrap();
+    assert_eq!(search_results.len(), 0); // Should find no cards
+
+    // Test case-insensitive search
+    let search_results = card_service.search_cards("MATHEMATICS").await.unwrap();
+    assert_eq!(search_results.len(), 2); // Should still find 2 cards
+
+    // Test partial word search
+    let search_results = card_service.search_cards("math").await.unwrap();
+    assert_eq!(search_results.len(), 2); // Should find cards containing "math"
+}
+
+#[tokio::test]
+async fn test_error_handling_edge_cases() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Test updating with empty content
+    let card = card_service.create_card(CreateCardRequest {
+        content: "Original".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let update_request = UpdateCardRequest {
+        content: Some("".to_string()),
+        topic_ids: None,
+        links: None,
+    };
+
+    let updated = card_service.update_card(card.id, update_request).await.unwrap();
+    assert!(updated.is_some());
+    assert_eq!(updated.unwrap().content, "");
+
+    // Test with very long content
+    let long_content = "a".repeat(10000);
+    let update_request = UpdateCardRequest {
+        content: Some(long_content.clone()),
+        topic_ids: None,
+        links: None,
+    };
+
+    let updated = card_service.update_card(card.id, update_request).await.unwrap();
+    assert!(updated.is_some());
+    assert_eq!(updated.unwrap().content, long_content);
+}
+
+#[tokio::test]
+async fn test_ui_preview_functionality() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Test cards with content that would trigger preview mode (>100 characters)
+    let long_content = "This is a very long card content that exceeds 100 characters and should trigger the preview functionality in the UI. ".repeat(2);
+    
+    let create_request = CreateCardRequest {
+        content: long_content.clone(),
+        topic_ids: vec![],
+        links: None,
+    };
+
+    let card = card_service.create_card(create_request).await.unwrap();
+    assert!(card.content.len() > 100);
+    assert_eq!(card.content, long_content);
+
+    // Test that content is properly stored and retrieved
+    let retrieved_card = card_service.get_card(card.id).await.unwrap();
+    assert!(retrieved_card.is_some());
+    assert_eq!(retrieved_card.unwrap().content.len(), long_content.len());
+}
+
+#[tokio::test]
+async fn test_keyboard_shortcut_ratings() {
+    use learning_system::FSRSScheduler;
+    
+    let scheduler = FSRSScheduler::new();
+    
+    // Test that all keyboard shortcut ratings (1-4) work correctly
+    let rating_mappings = vec![
+        (1, "Again"),
+        (2, "Hard"), 
+        (3, "Good"),
+        (4, "Easy"),
+    ];
+    
+    for (rating_int, _rating_name) in rating_mappings {
+        let rating = FSRSScheduler::get_rating_from_int(rating_int);
+        assert!(rating.is_some(), "Rating {} should be valid", rating_int);
+    }
+    
+    // Test invalid ratings
+    let invalid_ratings = vec![0, 5, -1, 10];
+    for invalid_rating in invalid_ratings {
+        let rating = FSRSScheduler::get_rating_from_int(invalid_rating);
+        assert!(rating.is_none(), "Rating {} should be invalid", invalid_rating);
+    }
 }

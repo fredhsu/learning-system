@@ -300,4 +300,157 @@ impl Database {
 
         Ok(review)
     }
+
+    pub async fn delete_card(&self, id: Uuid) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM cards WHERE id = ?1")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn update_card_content(&self, card: &Card) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE cards 
+            SET content = ?1, links = ?2
+            WHERE id = ?3
+            "#,
+        )
+        .bind(&card.content)
+        .bind(&card.links)
+        .bind(card.id.to_string())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn search_cards(&self, search_query: &str) -> Result<Vec<Card>> {
+        // If empty query, return all cards
+        if search_query.trim().is_empty() {
+            return self.get_all_cards().await;
+        }
+
+        // Use LIKE query for case-insensitive search
+        let query_pattern = format!("%{}%", search_query.to_lowercase());
+        let rows = sqlx::query(
+            "SELECT * FROM cards WHERE LOWER(content) LIKE ?1 ORDER BY creation_date DESC"
+        )
+        .bind(&query_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        self.rows_to_cards(rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::CreateCardRequest;
+
+    #[tokio::test]
+    async fn test_database_initialization() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        // Test that tables were created by trying to query them
+        let cards = db.get_all_cards().await.unwrap();
+        assert_eq!(cards.len(), 0);
+        
+        let topics = db.get_all_topics().await.unwrap();
+        assert_eq!(topics.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_database_delete_card() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        let create_request = CreateCardRequest {
+            content: "Test card for deletion".to_string(),
+            topic_ids: vec![],
+            links: None,
+        };
+        
+        let card = db.create_card(create_request).await.unwrap();
+        
+        // Verify card exists
+        let retrieved = db.get_card(card.id).await.unwrap();
+        assert!(retrieved.is_some());
+        
+        // Delete the card
+        let deleted = db.delete_card(card.id).await.unwrap();
+        assert!(deleted);
+        
+        // Verify card is gone
+        let retrieved = db.get_card(card.id).await.unwrap();
+        assert!(retrieved.is_none());
+        
+        // Test deleting non-existent card
+        let fake_id = Uuid::new_v4();
+        let not_deleted = db.delete_card(fake_id).await.unwrap();
+        assert!(!not_deleted);
+    }
+
+    #[tokio::test]
+    async fn test_database_update_card_content() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        let create_request = CreateCardRequest {
+            content: "Original content".to_string(),
+            topic_ids: vec![],
+            links: Some(vec![Uuid::new_v4()]),
+        };
+        
+        let mut card = db.create_card(create_request).await.unwrap();
+        assert_eq!(card.content, "Original content");
+        assert!(card.links.is_some());
+        
+        // Update the card
+        card.content = "Updated content".to_string();
+        card.links = None;
+        
+        db.update_card_content(&card).await.unwrap();
+        
+        // Retrieve and verify update
+        let updated = db.get_card(card.id).await.unwrap();
+        assert!(updated.is_some());
+        let updated = updated.unwrap();
+        assert_eq!(updated.content, "Updated content");
+        assert!(updated.links.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_database_topic_operations() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        // Test topic creation
+        let topic = db.create_topic("Test Topic".to_string(), Some("Description".to_string())).await.unwrap();
+        assert_eq!(topic.name, "Test Topic");
+        assert_eq!(topic.description, Some("Description".to_string()));
+        
+        // Test getting all topics
+        let topics = db.get_all_topics().await.unwrap();
+        assert_eq!(topics.len(), 1);
+        assert_eq!(topics[0].name, "Test Topic");
+    }
+
+    #[tokio::test]
+    async fn test_database_cards_due_for_review() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        let create_request = CreateCardRequest {
+            content: "Due card".to_string(),
+            topic_ids: vec![],
+            links: None,
+        };
+        
+        let _card = db.create_card(create_request).await.unwrap();
+        
+        // Card should be due for review immediately (next_review = creation_date)
+        let due_cards = db.get_cards_due_for_review().await.unwrap();
+        assert_eq!(due_cards.len(), 1);
+        assert_eq!(due_cards[0].content, "Due card");
+    }
 }

@@ -44,7 +44,7 @@ impl CardService {
         }
 
         // Update the card in database
-        self.db.update_card_after_review(&card).await?;
+        self.db.update_card_content(&card).await?;
 
         // Handle topic updates if provided
         if let Some(topic_ids) = request.topic_ids {
@@ -56,9 +56,7 @@ impl CardService {
     }
 
     pub async fn delete_card(&self, id: Uuid) -> Result<bool> {
-        // This would require a delete method in the Database
-        // For now, we'll return a placeholder
-        Ok(false)
+        self.db.delete_card(id).await
     }
 
     // Topic operations
@@ -113,10 +111,8 @@ impl CardService {
         Ok(Vec::new())
     }
 
-    pub async fn search_cards(&self, query: &str) -> Result<Vec<Card>> {
-        // This would require full-text search in the database
-        // For now, return empty vector
-        Ok(Vec::new())
+    pub async fn search_cards(&self, search_query: &str) -> Result<Vec<Card>> {
+        self.db.search_cards(search_query).await
     }
 
     pub async fn get_linked_cards(&self, card_id: Uuid) -> Result<Vec<Card>> {
@@ -139,5 +135,188 @@ impl CardService {
         } else {
             Ok(Vec::new())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::Database;
+
+    async fn create_test_service() -> CardService {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        CardService::new(db)
+    }
+
+    #[tokio::test]
+    async fn test_card_service_creation() {
+        let service = create_test_service().await;
+        let cards = service.get_all_cards().await.unwrap();
+        assert_eq!(cards.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_card_service_crud_operations() {
+        let service = create_test_service().await;
+
+        // Create
+        let create_request = CreateCardRequest {
+            content: "Service test card".to_string(),
+            topic_ids: vec![],
+            links: None,
+        };
+
+        let created_card = service.create_card(create_request).await.unwrap();
+        assert_eq!(created_card.content, "Service test card");
+
+        // Read
+        let retrieved_card = service.get_card(created_card.id).await.unwrap();
+        assert!(retrieved_card.is_some());
+        assert_eq!(retrieved_card.as_ref().unwrap().content, "Service test card");
+
+        // Update
+        let update_request = UpdateCardRequest {
+            content: Some("Updated service test card".to_string()),
+            topic_ids: None,
+            links: None,
+        };
+
+        let updated_card = service.update_card(created_card.id, update_request).await.unwrap();
+        assert!(updated_card.is_some());
+        assert_eq!(updated_card.unwrap().content, "Updated service test card");
+
+        // Delete
+        let deleted = service.delete_card(created_card.id).await.unwrap();
+        assert!(deleted);
+
+        let retrieved_after_delete = service.get_card(created_card.id).await.unwrap();
+        assert!(retrieved_after_delete.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_card_service_update_partial() {
+        let service = create_test_service().await;
+
+        let create_request = CreateCardRequest {
+            content: "Original".to_string(),
+            topic_ids: vec![],
+            links: None,
+        };
+
+        let card = service.create_card(create_request).await.unwrap();
+
+        // Update only content, leave links unchanged
+        let update_request = UpdateCardRequest {
+            content: Some("Updated".to_string()),
+            topic_ids: None,
+            links: None, // This should not change the existing links value
+        };
+
+        let updated = service.update_card(card.id, update_request).await.unwrap();
+        assert!(updated.is_some());
+        assert_eq!(updated.unwrap().content, "Updated");
+    }
+
+    #[tokio::test]
+    async fn test_card_service_linked_cards() {
+        let service = create_test_service().await;
+
+        // Create two cards
+        let card1 = service.create_card(CreateCardRequest {
+            content: "Card 1".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        let card2 = service.create_card(CreateCardRequest {
+            content: "Card 2".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        // Link card1 to card2
+        let update_request = UpdateCardRequest {
+            content: None,
+            topic_ids: None,
+            links: Some(vec![card2.id]),
+        };
+
+        service.update_card(card1.id, update_request).await.unwrap();
+
+        // Test getting linked cards
+        let linked_cards = service.get_linked_cards(card1.id).await.unwrap();
+        assert_eq!(linked_cards.len(), 1);
+        assert_eq!(linked_cards[0].id, card2.id);
+
+        // Test getting linked cards for card without links
+        let no_links = service.get_linked_cards(card2.id).await.unwrap();
+        assert_eq!(no_links.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_card_service_review_functionality() {
+        let service = create_test_service().await;
+
+        let card = service.create_card(CreateCardRequest {
+            content: "Review test".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        // Initially card should be due for review
+        let due_cards = service.get_cards_due_for_review().await.unwrap();
+        assert_eq!(due_cards.len(), 1);
+
+        // Review the card
+        let reviewed = service.review_card(card.id, 3).await.unwrap();
+        assert!(reviewed.is_some());
+        let reviewed = reviewed.unwrap();
+        assert_eq!(reviewed.reps, 1);
+        assert!(reviewed.next_review > card.next_review);
+    }
+
+    #[tokio::test]
+    async fn test_card_service_topics() {
+        let service = create_test_service().await;
+
+        // Create a topic
+        let topic = service.create_topic("Test Topic".to_string(), None).await.unwrap();
+        assert_eq!(topic.name, "Test Topic");
+
+        // Get all topics
+        let topics = service.get_all_topics().await.unwrap();
+        assert_eq!(topics.len(), 1);
+        assert_eq!(topics[0].name, "Test Topic");
+    }
+
+    #[tokio::test]
+    async fn test_card_service_nonexistent_operations() {
+        let service = create_test_service().await;
+        let fake_id = Uuid::new_v4();
+
+        // Test getting nonexistent card
+        let card = service.get_card(fake_id).await.unwrap();
+        assert!(card.is_none());
+
+        // Test updating nonexistent card
+        let update_request = UpdateCardRequest {
+            content: Some("Should fail".to_string()),
+            topic_ids: None,
+            links: None,
+        };
+        let updated = service.update_card(fake_id, update_request).await.unwrap();
+        assert!(updated.is_none());
+
+        // Test deleting nonexistent card
+        let deleted = service.delete_card(fake_id).await.unwrap();
+        assert!(!deleted);
+
+        // Test reviewing nonexistent card
+        let reviewed = service.review_card(fake_id, 3).await.unwrap();
+        assert!(reviewed.is_none());
+
+        // Test getting linked cards for nonexistent card
+        let linked = service.get_linked_cards(fake_id).await.unwrap();
+        assert_eq!(linked.len(), 0);
     }
 }
