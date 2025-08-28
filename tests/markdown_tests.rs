@@ -23,6 +23,7 @@ async fn test_card_with_markdown_content() {
     let markdown_content = "# Markdown Test\n\n**Bold text** and *italic text*\n\n- List item 1\n- List item 2\n\n```rust\nlet x = 42;\n```\n\n$$E = mc^2$$";
     
     let request_body = json!({
+        "zettel_id": "MARKDOWN-001",
         "content": markdown_content,
         "topic_ids": []
     });
@@ -47,6 +48,7 @@ async fn test_card_content_persistence() {
     
     // Create card with markdown content
     let create_request = json!({
+        "zettel_id": "MARKDOWN-002",
         "content": original_content,
         "topic_ids": []
     });

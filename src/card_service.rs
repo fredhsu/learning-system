@@ -29,11 +29,25 @@ impl CardService {
         self.db.get_card(id).await
     }
 
+    pub async fn get_card_by_zettel_id(&self, zettel_id: &str) -> Result<Option<Card>> {
+        self.db.get_card_by_zettel_id(zettel_id).await
+    }
+
     pub async fn update_card(&self, id: Uuid, request: UpdateCardRequest) -> Result<Option<Card>> {
         let mut card = match self.db.get_card(id).await? {
             Some(card) => card,
             None => return Ok(None),
         };
+
+        if let Some(zettel_id) = request.zettel_id {
+            // Validate that the new zettel_id doesn't already exist (unless it's the same card)
+            if let Some(existing) = self.db.get_card_by_zettel_id(&zettel_id).await? {
+                if existing.id != card.id {
+                    return Err(anyhow::anyhow!("Zettelkasten ID '{}' already exists", zettel_id));
+                }
+            }
+            card.zettel_id = zettel_id;
+        }
 
         if let Some(content) = request.content {
             card.content = content;
@@ -161,6 +175,7 @@ mod tests {
 
         // Create
         let create_request = CreateCardRequest {
+            zettel_id: "SERVICE-TEST-001".to_string(),
             content: "Service test card".to_string(),
             topic_ids: vec![],
             links: None,
@@ -176,6 +191,7 @@ mod tests {
 
         // Update
         let update_request = UpdateCardRequest {
+            zettel_id: Some("SERVICE-TEST-002".to_string()),
             content: Some("Updated service test card".to_string()),
             topic_ids: None,
             links: None,
@@ -198,6 +214,7 @@ mod tests {
         let service = create_test_service().await;
 
         let create_request = CreateCardRequest {
+            zettel_id: "SERVICE-TEST-003".to_string(),
             content: "Original".to_string(),
             topic_ids: vec![],
             links: None,
@@ -207,6 +224,7 @@ mod tests {
 
         // Update only content, leave links unchanged
         let update_request = UpdateCardRequest {
+            zettel_id: Some("SERVICE-TEST-004".to_string()),
             content: Some("Updated".to_string()),
             topic_ids: None,
             links: None, // This should not change the existing links value
@@ -223,12 +241,14 @@ mod tests {
 
         // Create two cards
         let card1 = service.create_card(CreateCardRequest {
+            zettel_id: "SERVICE-TEST-005".to_string(),
             content: "Card 1".to_string(),
             topic_ids: vec![],
             links: None,
         }).await.unwrap();
 
         let card2 = service.create_card(CreateCardRequest {
+            zettel_id: "SERVICE-TEST-006".to_string(),
             content: "Card 2".to_string(),
             topic_ids: vec![],
             links: None,
@@ -236,6 +256,7 @@ mod tests {
 
         // Link card1 to card2
         let update_request = UpdateCardRequest {
+            zettel_id: Some("SERVICE-TEST-007".to_string()),
             content: None,
             topic_ids: None,
             links: Some(vec![card2.id]),
@@ -258,6 +279,7 @@ mod tests {
         let service = create_test_service().await;
 
         let card = service.create_card(CreateCardRequest {
+            zettel_id: "SERVICE-TEST-008".to_string(),
             content: "Review test".to_string(),
             topic_ids: vec![],
             links: None,
@@ -300,6 +322,7 @@ mod tests {
 
         // Test updating nonexistent card
         let update_request = UpdateCardRequest {
+            zettel_id: Some("SERVICE-TEST-009".to_string()),
             content: Some("Should fail".to_string()),
             topic_ids: None,
             links: None,

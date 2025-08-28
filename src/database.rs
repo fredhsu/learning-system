@@ -23,6 +23,7 @@ impl Database {
             r#"
             CREATE TABLE IF NOT EXISTS cards (
                 id TEXT PRIMARY KEY,
+                zettel_id TEXT NOT NULL UNIQUE,
                 content TEXT NOT NULL,
                 creation_date TEXT NOT NULL,
                 last_reviewed TEXT,
@@ -85,14 +86,26 @@ impl Database {
         Ok(())
     }
 
+
     // Card operations
     pub async fn create_card(&self, request: CreateCardRequest) -> Result<Card> {
         let card_id = Uuid::new_v4();
         let now = Utc::now();
         let links_json = request.links.as_ref().map(|l| serde_json::to_string(l).unwrap());
 
+        // Validate that zettel_id doesn't already exist
+        let existing = sqlx::query("SELECT id FROM cards WHERE zettel_id = ?1")
+            .bind(&request.zettel_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        
+        if existing.is_some() {
+            return Err(anyhow::anyhow!("Zettelkasten ID '{}' already exists", request.zettel_id));
+        }
+
         let card = Card {
             id: card_id,
+            zettel_id: request.zettel_id,
             content: request.content,
             creation_date: now,
             last_reviewed: None,
@@ -108,12 +121,13 @@ impl Database {
 
         sqlx::query(
             r#"
-            INSERT INTO cards (id, content, creation_date, last_reviewed, next_review, 
+            INSERT INTO cards (id, zettel_id, content, creation_date, last_reviewed, next_review, 
                              difficulty, stability, retrievability, reps, lapses, state, links)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
         )
         .bind(card.id.to_string())
+        .bind(&card.zettel_id)
         .bind(&card.content)
         .bind(card.creation_date.to_rfc3339())
         .bind(card.last_reviewed.map(|d| d.to_rfc3339()))
@@ -153,6 +167,7 @@ impl Database {
         if let Some(row) = row {
             Ok(Some(Card {
                 id: Uuid::parse_str(&row.get::<String, _>("id"))?,
+                zettel_id: row.get("zettel_id"),
                 content: row.get("content"),
                 creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
                 last_reviewed: row.get::<Option<String>, _>("last_reviewed")
@@ -196,6 +211,7 @@ impl Database {
         for row in rows {
             cards.push(Card {
                 id: Uuid::parse_str(&row.get::<String, _>("id"))?,
+                zettel_id: row.get("zettel_id"),
                 content: row.get("content"),
                 creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
                 last_reviewed: row.get::<Option<String>, _>("last_reviewed")
@@ -314,10 +330,11 @@ impl Database {
         sqlx::query(
             r#"
             UPDATE cards 
-            SET content = ?1, links = ?2
-            WHERE id = ?3
+            SET zettel_id = ?1, content = ?2, links = ?3
+            WHERE id = ?4
             "#,
         )
+        .bind(&card.zettel_id)
         .bind(&card.content)
         .bind(&card.links)
         .bind(card.id.to_string())
@@ -325,6 +342,36 @@ impl Database {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn get_card_by_zettel_id(&self, zettel_id: &str) -> Result<Option<Card>> {
+        let row = sqlx::query(
+            "SELECT * FROM cards WHERE zettel_id = ?1"
+        )
+        .bind(zettel_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(Card {
+                id: Uuid::parse_str(&row.get::<String, _>("id"))?,
+                zettel_id: row.get("zettel_id"),
+                content: row.get("content"),
+                creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
+                last_reviewed: row.get::<Option<String>, _>("last_reviewed")
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
+                difficulty: row.get("difficulty"),
+                stability: row.get("stability"),
+                retrievability: row.get("retrievability"),
+                reps: row.get("reps"),
+                lapses: row.get("lapses"),
+                state: row.get("state"),
+                links: row.get("links"),
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn search_cards(&self, search_query: &str) -> Result<Vec<Card>> {
@@ -368,6 +415,7 @@ mod tests {
         let db = Database::new("sqlite::memory:").await.unwrap();
         
         let create_request = CreateCardRequest {
+            zettel_id: "DB-TEST-001".to_string(),
             content: "Test card for deletion".to_string(),
             topic_ids: vec![],
             links: None,
@@ -398,6 +446,7 @@ mod tests {
         let db = Database::new("sqlite::memory:").await.unwrap();
         
         let create_request = CreateCardRequest {
+            zettel_id: "DB-TEST-002".to_string(),
             content: "Original content".to_string(),
             topic_ids: vec![],
             links: Some(vec![Uuid::new_v4()]),
@@ -441,6 +490,7 @@ mod tests {
         let db = Database::new("sqlite::memory:").await.unwrap();
         
         let create_request = CreateCardRequest {
+            zettel_id: "DB-TEST-003".to_string(),
             content: "Due card".to_string(),
             topic_ids: vec![],
             links: None,

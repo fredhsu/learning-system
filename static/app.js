@@ -243,7 +243,7 @@ class LearningSystem {
 
             const data = await response.json();
             
-            if (!response.ok) {
+            if (!response.ok || !data.success) {
                 throw new Error(data.error || 'API request failed');
             }
 
@@ -371,6 +371,9 @@ class LearningSystem {
             
             return `
                 <div class="card" data-id="${card.id}">
+                    <div class="card-header">
+                        <span class="zettel-id">${card.zettel_id}</span>
+                    </div>
                     <div class="card-content-wrapper">
                         ${needsPreview ? `
                             <div class="card-content card-preview" data-full-id="${card.id}">
@@ -483,15 +486,22 @@ class LearningSystem {
     async handleCreateCard(e) {
         e.preventDefault();
         
+        const zettelId = document.getElementById('card-zettel-id').value.trim();
         const content = document.getElementById('card-content').value;
         const topicsText = document.getElementById('card-topics').value;
         const linksText = document.getElementById('card-links').value;
+
+        if (!zettelId) {
+            this.showError('Zettel ID is required');
+            return;
+        }
 
         // For now, we'll create topics if they don't exist
         const topicNames = topicsText.split(',').map(t => t.trim()).filter(t => t);
         const topic_ids = []; // We'd need to resolve topic names to IDs in a real implementation
 
         const cardData = {
+            zettel_id: zettelId,
             content,
             topic_ids,
             links: linksText ? linksText.split(',').map(l => l.trim()) : null
@@ -814,6 +824,7 @@ class LearningSystem {
             
             // Populate edit form
             document.getElementById('edit-card-id').value = card.id;
+            document.getElementById('edit-card-zettel-id').value = card.zettel_id;
             document.getElementById('edit-card-content').value = card.content;
             
             // Parse links if they exist
@@ -838,10 +849,12 @@ class LearningSystem {
         e.preventDefault();
         
         const cardId = document.getElementById('edit-card-id').value;
+        const zettelId = document.getElementById('edit-card-zettel-id').value.trim();
         const content = document.getElementById('edit-card-content').value;
         const linksText = document.getElementById('edit-card-links').value;
 
         const updateData = {
+            zettel_id: zettelId || null,
             content: content || null,
             links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
         };

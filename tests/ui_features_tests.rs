@@ -22,6 +22,7 @@ async fn test_keyboard_shortcut_rating_system() {
     
     // Create a card for testing
     let create_request = json!({
+        "zettel_id": "UI-001",
         "content": "Keyboard shortcut test card",
         "topic_ids": [],
         "links": null
@@ -75,6 +76,7 @@ async fn test_preview_content_functionality() {
     assert!(short_content.len() <= 100);
     
     let short_request = json!({
+        "zettel_id": "UI-002",
         "content": short_content,
         "topic_ids": [],
         "links": null
@@ -91,6 +93,7 @@ async fn test_preview_content_functionality() {
     assert!(long_content.len() > 100);
     
     let long_request = json!({
+        "zettel_id": "UI-003",
         "content": long_content,
         "topic_ids": [],
         "links": null
@@ -130,6 +133,7 @@ async fn test_search_functionality_with_highlighting() {
 
     for (content, _description) in &test_cards {
         let create_request = json!({
+            "zettel_id": format!("UI-SEARCH-{:03}", test_cards.iter().position(|(c, _)| c == content).unwrap() + 1),
             "content": content,
             "topic_ids": [],
             "links": null
@@ -215,6 +219,7 @@ async fn test_loading_state_consistency() {
     
     for i in 0..5 {
         let create_request = json!({
+            "zettel_id": format!("UI-LOAD-{:03}", i + 1),
             "content": format!("Loading test card {}", i),
             "topic_ids": [],
             "links": null
@@ -258,6 +263,7 @@ async fn test_responsive_design_data_structure() {
     // Test that API responses contain all fields needed for responsive design
     
     let create_request = json!({
+        "zettel_id": "UI-004",
         "content": "Responsive design test card with various metadata",
         "topic_ids": [],
         "links": null
@@ -316,8 +322,9 @@ async fn test_typography_scale_data_validation() {
         ("Math", "$E = mc^2$ and $$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$"),
     ];
 
-    for (label, content) in content_variations {
+    for (i, (label, content)) in content_variations.iter().enumerate() {
         let create_request = json!({
+            "zettel_id": format!("UI-TYPO-{:03}", i + 1),
             "content": content,
             "topic_ids": [],
             "links": null
@@ -330,7 +337,7 @@ async fn test_typography_scale_data_validation() {
         create_response.assert_status_ok();
         
         let create_body: Value = create_response.json();
-        assert_eq!(create_body["data"]["content"], content);
+        assert_eq!(create_body["data"]["content"], *content);
         
         println!("Successfully tested {} typography: {}", label, content);
     }
