@@ -14,6 +14,7 @@ async fn test_database_operations_with_invalid_data() {
     
     // Test creating card with empty content
     let create_request = CreateCardRequest {
+        zettel_id: "ERROR-001".to_string(),
         content: "".to_string(),
         topic_ids: vec![],
         links: None,
@@ -26,6 +27,7 @@ async fn test_database_operations_with_invalid_data() {
     // Test with very long content
     let long_content = "a".repeat(100000);
     let create_request = CreateCardRequest {
+        zettel_id: "ERROR-002".to_string(),
         content: long_content.clone(),
         topic_ids: vec![],
         links: None,
@@ -42,6 +44,7 @@ async fn test_concurrent_card_operations() {
     
     // Create a card
     let create_request = CreateCardRequest {
+        zettel_id: "ERROR-003".to_string(),
         content: "Concurrent test card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -56,6 +59,7 @@ async fn test_concurrent_card_operations() {
         let service = service.clone();
         async move {
             let update_request = UpdateCardRequest {
+                zettel_id: Some("ERROR-004".to_string()),
                 content: Some("Updated by task 1".to_string()),
                 topic_ids: None,
                 links: None,
@@ -68,6 +72,7 @@ async fn test_concurrent_card_operations() {
         let service = service.clone();
         async move {
             let update_request = UpdateCardRequest {
+                zettel_id: Some("ERROR-005".to_string()),
                 content: Some("Updated by task 2".to_string()),
                 topic_ids: None,
                 links: None,
@@ -112,6 +117,7 @@ async fn test_invalid_uuid_handling() {
         
         // Update card
         let update_request = UpdateCardRequest {
+            zettel_id: Some("ERROR-006".to_string()),
             content: Some("Should not work".to_string()),
             topic_ids: None,
             links: None,
@@ -135,6 +141,7 @@ async fn test_invalid_rating_handling() {
     let service = CardService::new(db);
     
     let create_request = CreateCardRequest {
+        zettel_id: "ERROR-007".to_string(),
         content: "Rating test card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -165,6 +172,7 @@ async fn test_malformed_links_handling() {
     
     // Create a card
     let create_request = CreateCardRequest {
+        zettel_id: "ERROR-008".to_string(),
         content: "Card with bad links".to_string(),
         topic_ids: vec![],
         links: Some(vec![Uuid::new_v4(), Uuid::new_v4()]), // Non-existent UUIDs
@@ -209,6 +217,7 @@ async fn test_card_cascade_deletion() {
     
     // Create a card associated with the topic
     let create_request = CreateCardRequest {
+        zettel_id: "ERROR-009".to_string(),
         content: "Card with topic".to_string(),
         topic_ids: vec![topic.id],
         links: None,
@@ -252,6 +261,7 @@ async fn test_extreme_date_handling() {
     
     let mut card = learning_system::Card {
         id: Uuid::new_v4(),
+        zettel_id: "test-extreme-dates".to_string(),
         content: "Extreme date card".to_string(),
         creation_date: extreme_past,
         last_reviewed: Some(extreme_past),
@@ -281,6 +291,7 @@ async fn test_memory_stress() {
     
     for i in 0..100 {
         let create_request = CreateCardRequest {
+            zettel_id: format!("ERROR-STRESS-{:03}", i + 1),
             content: format!("Stress test card {}", i),
             topic_ids: vec![],
             links: None,
@@ -297,6 +308,7 @@ async fn test_memory_stress() {
     // Update all cards
     for (i, &card_id) in card_ids.iter().enumerate() {
         let update_request = UpdateCardRequest {
+            zettel_id: Some(format!("ERROR-STRESS-UPDATE-{:03}", i + 1)),
             content: Some(format!("Updated stress test card {}", i)),
             topic_ids: None,
             links: None,

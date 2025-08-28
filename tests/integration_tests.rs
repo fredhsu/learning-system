@@ -7,6 +7,7 @@ async fn test_card_creation_and_retrieval() {
     let card_service = CardService::new(db);
 
     let create_request = CreateCardRequest {
+        zettel_id: "TEST-001".to_string(),
         content: "Test card content with LaTeX: $x^2 + y^2 = z^2$".to_string(),
         topic_ids: vec![],
         links: None,
@@ -34,6 +35,7 @@ async fn test_fsrs_scheduling() {
     let card_service = CardService::new(db);
 
     let create_request = CreateCardRequest {
+        zettel_id: "TEST-002".to_string(),
         content: "FSRS test card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -79,6 +81,7 @@ async fn test_review_workflow() {
     let card_service = CardService::new(db);
 
     let create_request = CreateCardRequest {
+        zettel_id: "TEST-003".to_string(),
         content: "Review test card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -108,6 +111,7 @@ async fn test_card_update() {
     let card_service = CardService::new(db);
 
     let create_request = CreateCardRequest {
+        zettel_id: "UPDATE-001".to_string(),
         content: "Original content".to_string(),
         topic_ids: vec![],
         links: None,
@@ -119,6 +123,7 @@ async fn test_card_update() {
 
     // Test updating content
     let update_request = UpdateCardRequest {
+        zettel_id: Some("UPDATE-002".to_string()),
         content: Some("Updated content".to_string()),
         topic_ids: None,
         links: Some(vec![Uuid::new_v4()]),
@@ -146,6 +151,7 @@ async fn test_card_update_nonexistent() {
 
     let fake_id = Uuid::new_v4();
     let update_request = UpdateCardRequest {
+        zettel_id: Some("UPDATE-003".to_string()),
         content: Some("This should fail".to_string()),
         topic_ids: None,
         links: None,
@@ -161,6 +167,7 @@ async fn test_card_deletion() {
     let card_service = CardService::new(db);
 
     let create_request = CreateCardRequest {
+        zettel_id: "DELETE-001".to_string(),
         content: "Card to be deleted".to_string(),
         topic_ids: vec![],
         links: None,
@@ -200,6 +207,7 @@ async fn test_database_card_operations() {
     let db = Database::new("sqlite::memory:").await.unwrap();
 
     let create_request = CreateCardRequest {
+        zettel_id: "DB-001".to_string(),
         content: "Direct database test".to_string(),
         topic_ids: vec![],
         links: Some(vec![Uuid::new_v4()]),
@@ -242,6 +250,7 @@ async fn test_card_links_functionality() {
 
     // Create first card
     let card1 = card_service.create_card(CreateCardRequest {
+        zettel_id: "LINK-001".to_string(),
         content: "Card 1".to_string(),
         topic_ids: vec![],
         links: None,
@@ -249,6 +258,7 @@ async fn test_card_links_functionality() {
 
     // Create second card
     let card2 = card_service.create_card(CreateCardRequest {
+        zettel_id: "LINK-002".to_string(),
         content: "Card 2".to_string(),
         topic_ids: vec![],
         links: None,
@@ -256,6 +266,7 @@ async fn test_card_links_functionality() {
 
     // Update first card to link to second card
     let update_request = UpdateCardRequest {
+        zettel_id: Some("LINK-003".to_string()),
         content: None,
         topic_ids: None,
         links: Some(vec![card2.id]),
@@ -280,6 +291,7 @@ async fn test_multiple_card_operations() {
     let mut card_ids = Vec::new();
     for i in 1..=5 {
         let create_request = CreateCardRequest {
+            zettel_id: format!("MULTI-{:03}", i),
             content: format!("Test card {}", i),
             topic_ids: vec![],
             links: None,
@@ -296,6 +308,7 @@ async fn test_multiple_card_operations() {
     for (i, &card_id) in card_ids.iter().enumerate() {
         if i % 2 == 0 {
             let update_request = UpdateCardRequest {
+                zettel_id: Some(format!("MULTI-UPDATE-{:03}", i + 1)),
                 content: Some(format!("Updated test card {}", i + 1)),
                 topic_ids: None,
                 links: None,
@@ -343,6 +356,7 @@ async fn test_search_functionality() {
     let mut created_card_ids = Vec::new();
     for (content, _topics) in &cards_data {
         let create_request = CreateCardRequest {
+            zettel_id: format!("SEARCH-{:03}", created_card_ids.len() + 1),
             content: content.to_string(),
             topic_ids: vec![],
             links: None,
@@ -380,12 +394,14 @@ async fn test_error_handling_edge_cases() {
 
     // Test updating with empty content
     let card = card_service.create_card(CreateCardRequest {
+        zettel_id: "EDGE-001".to_string(),
         content: "Original".to_string(),
         topic_ids: vec![],
         links: None,
     }).await.unwrap();
 
     let update_request = UpdateCardRequest {
+        zettel_id: Some("EDGE-002".to_string()),
         content: Some("".to_string()),
         topic_ids: None,
         links: None,
@@ -398,6 +414,7 @@ async fn test_error_handling_edge_cases() {
     // Test with very long content
     let long_content = "a".repeat(10000);
     let update_request = UpdateCardRequest {
+        zettel_id: Some("EDGE-003".to_string()),
         content: Some(long_content.clone()),
         topic_ids: None,
         links: None,
@@ -417,6 +434,7 @@ async fn test_ui_preview_functionality() {
     let long_content = "This is a very long card content that exceeds 100 characters and should trigger the preview functionality in the UI. ".repeat(2);
     
     let create_request = CreateCardRequest {
+        zettel_id: "UI-PREVIEW-001".to_string(),
         content: long_content.clone(),
         topic_ids: vec![],
         links: None,

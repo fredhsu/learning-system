@@ -72,7 +72,14 @@ pub async fn create_card(
         Ok(card) => Ok(Json(ApiResponse::success(card))),
         Err(e) => {
             eprintln!("Error creating card: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error_msg = e.to_string();
+            if error_msg.contains("already exists") {
+                Ok(Json(ApiResponse::error(error_msg)))
+            } else if error_msg.contains("required") {
+                Ok(Json(ApiResponse::error("Zettel ID is required".to_string())))
+            } else {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 }
@@ -86,6 +93,20 @@ pub async fn get_card(
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
             eprintln!("Error getting card: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn get_card_by_zettel_id(
+    State(state): State<AppState>,
+    Path(zettel_id): Path<String>,
+) -> Result<Json<ApiResponse<Card>>, StatusCode> {
+    match state.card_service.get_card_by_zettel_id(&zettel_id).await {
+        Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            eprintln!("Error getting card by zettel ID: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -298,6 +319,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/cards", post(create_card))
         .route("/api/cards", get(get_all_cards))
         .route("/api/cards/search", get(search_cards))
+        .route("/api/cards/zettel/:zettel_id", get(get_card_by_zettel_id))
         .route("/api/cards/:id", get(get_card))
         .route("/api/cards/:id", put(update_card))
         .route("/api/cards/:id", delete(delete_card))

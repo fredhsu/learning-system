@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Card {
     pub id: Uuid,
+    pub zettel_id: String, // Human-readable unique identifier for Zettelkasten linking
     pub content: String,
     pub creation_date: DateTime<Utc>,
     pub last_reviewed: Option<DateTime<Utc>>,
@@ -44,6 +45,7 @@ pub struct Review {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCardRequest {
+    pub zettel_id: String, // Required user-defined unique identifier
     pub content: String,
     pub topic_ids: Vec<Uuid>,
     pub links: Option<Vec<Uuid>>,
@@ -51,6 +53,7 @@ pub struct CreateCardRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateCardRequest {
+    pub zettel_id: Option<String>,
     pub content: Option<String>,
     pub topic_ids: Option<Vec<Uuid>>,
     pub links: Option<Vec<Uuid>>,

@@ -412,9 +412,20 @@ main {
 
 .card-header {
     display: flex;
-    justify-content: between;
+    justify-content: space-between;
     align-items: start;
     margin-bottom: 1rem;
+}
+
+.zettel-id {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    background: var(--color-secondary-light);
+    color: var(--color-secondary-dark);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    border: 1px solid var(--color-secondary);
 }
 
 .card-meta {
@@ -1021,6 +1032,14 @@ main {
     outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
+}
+
+.field-hint {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
 }
 
 .empty-state {

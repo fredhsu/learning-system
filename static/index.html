@@ -94,6 +94,11 @@
                         <h3>Create New Card</h3>
                         <form id="create-card-form">
                             <div class="form-group">
+                                <label for="card-zettel-id">Zettel ID:</label>
+                                <input type="text" id="card-zettel-id" required placeholder="e.g., 1.1, 1.1a, 50.4a.5">
+                                <small class="field-hint">Unique identifier for this card (required)</small>
+                            </div>
+                            <div class="form-group">
                                 <label for="card-content">Content (supports Markdown & LaTeX):</label>
                                 <textarea id="card-content" rows="6" placeholder="Enter your knowledge card content here..."></textarea>
                             </div>
@@ -120,6 +125,11 @@
                         <h3>Edit Card</h3>
                         <form id="edit-card-form">
                             <input type="hidden" id="edit-card-id">
+                            <div class="form-group">
+                                <label for="edit-card-zettel-id">Zettel ID:</label>
+                                <input type="text" id="edit-card-zettel-id" required placeholder="e.g., 1.1, 1.1a, 50.4a.5">
+                                <small class="field-hint">Unique identifier for this card</small>
+                            </div>
                             <div class="form-group">
                                 <label for="edit-card-content">Content (supports Markdown & LaTeX):</label>
                                 <textarea id="edit-card-content" rows="6" placeholder="Enter your knowledge card content here..."></textarea>

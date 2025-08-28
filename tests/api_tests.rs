@@ -22,6 +22,7 @@ async fn test_api_create_card() {
     let server = create_test_server().await;
     
     let request_body = json!({
+        "zettel_id": "API-001",
         "content": "Test API card creation",
         "topic_ids": [],
         "links": null
@@ -46,6 +47,7 @@ async fn test_api_get_all_cards() {
     
     // First create a card
     let create_request = json!({
+        "zettel_id": "API-002",
         "content": "Card for GET test",
         "topic_ids": [],
         "links": null
@@ -74,6 +76,7 @@ async fn test_api_get_single_card() {
     
     // Create a card first
     let create_request = json!({
+        "zettel_id": "API-003",
         "content": "Single card test",
         "topic_ids": [],
         "links": null
@@ -118,6 +121,7 @@ async fn test_api_update_card() {
     
     // Create a card first
     let create_request = json!({
+        "zettel_id": "API-004",
         "content": "Original content",
         "topic_ids": [],
         "links": null
@@ -134,6 +138,7 @@ async fn test_api_update_card() {
 
     // Update the card
     let update_request = json!({
+        "zettel_id": "API-005",
         "content": "Updated content via API",
         "links": null
     });
@@ -156,6 +161,7 @@ async fn test_api_update_nonexistent_card() {
     
     let fake_id = Uuid::new_v4();
     let update_request = json!({
+        "zettel_id": "API-006",
         "content": "This should fail",
         "links": null
     });
@@ -174,6 +180,7 @@ async fn test_api_delete_card() {
     
     // Create a card first
     let create_request = json!({
+        "zettel_id": "API-007",
         "content": "Card to be deleted",
         "topic_ids": [],
         "links": null
@@ -223,6 +230,7 @@ async fn test_api_cards_due_for_review() {
     
     // Create a card
     let create_request = json!({
+        "zettel_id": "API-008",
         "content": "Due for review",
         "topic_ids": [],
         "links": null
@@ -299,6 +307,7 @@ async fn test_api_review_card() {
     
     // Create a card first
     let create_request = json!({
+        "zettel_id": "API-009",
         "content": "Card for review",
         "topic_ids": [],
         "links": null
@@ -367,6 +376,7 @@ async fn test_api_card_with_links() {
     
     // Create first card
     let create_request1 = json!({
+        "zettel_id": "API-010",
         "content": "Card 1",
         "topic_ids": [],
         "links": null
@@ -383,6 +393,7 @@ async fn test_api_card_with_links() {
 
     // Create second card that links to the first
     let create_request2 = json!({
+        "zettel_id": "API-011",
         "content": "Card 2 with links",
         "topic_ids": [],
         "links": [card1_id]
@@ -424,6 +435,7 @@ async fn test_api_search_cards() {
 
     for content in &search_test_cards {
         let create_request = json!({
+            "zettel_id": format!("API-SEARCH-{:03}", search_test_cards.iter().position(|&c| c == *content).unwrap() + 1),
             "content": content,
             "topic_ids": [],
             "links": null
@@ -484,6 +496,7 @@ async fn test_api_search_url_encoding() {
     
     // Create a card with special characters
     let create_request = json!({
+        "zettel_id": "API-012",
         "content": "Special chars: !@#$%^&*() and spaces",
         "topic_ids": [],
         "links": null
@@ -512,6 +525,7 @@ async fn test_api_response_structure() {
     
     // Test that all API responses follow the expected structure
     let create_request = json!({
+        "zettel_id": "API-013",
         "content": "Response structure test",
         "topic_ids": [],
         "links": null
