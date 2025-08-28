@@ -1,9 +1,8 @@
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
-use crate::models::{Card, QuizQuestion, QuizResponse};
+use crate::models::{Card, QuizQuestion};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMRequest {
@@ -210,7 +209,7 @@ impl LLMService {
     pub async fn generate_quiz_questions_local(
         &self,
         card: &Card,
-        local_endpoint: &str,
+        _local_endpoint: &str,
     ) -> Result<Vec<QuizQuestion>> {
         // This would integrate with a local LLM like Ollama
         // For now, return a simple hardcoded question as fallback

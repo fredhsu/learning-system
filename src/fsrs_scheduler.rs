@@ -1,6 +1,5 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc, Duration};
-use uuid::Uuid;
 
 use crate::models::{Card};
 
@@ -14,25 +13,19 @@ pub enum Rating {
 
 #[derive(Debug, Clone)]
 pub struct ReviewLog {
-    pub rating: Rating,
     pub scheduled_days: u32,
-    pub elapsed_days: u32,
 }
 
 #[derive(Clone)]
 pub struct FSRSScheduler {
     // Simplified FSRS parameters
     initial_ease: f64,
-    minimum_interval: i64,
-    maximum_interval: i64,
 }
 
 impl FSRSScheduler {
     pub fn new() -> Self {
         Self {
             initial_ease: 2.5,
-            minimum_interval: 1,
-            maximum_interval: 36500, // ~100 years
         }
     }
 
@@ -63,9 +56,7 @@ impl FSRSScheduler {
         };
 
         let review_log = ReviewLog {
-            rating,
             scheduled_days: new_interval as u32,
-            elapsed_days,
         };
 
         Ok((updated_card, review_log))
@@ -146,11 +137,8 @@ impl FSRSScheduler {
         }
     }
 
-    pub fn rating_to_int(rating: Rating) -> i32 {
-        rating as i32
-    }
-
     // Add request_retention field for testing compatibility
+    #[allow(dead_code)]
     pub const fn request_retention(&self) -> f64 {
         0.9
     }

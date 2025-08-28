@@ -7,7 +7,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -29,7 +28,6 @@ pub struct ReviewRequest {
 
 #[derive(Deserialize)]
 pub struct QuizAnswerRequest {
-    pub question_index: usize,
     pub answer: String,
 }
 

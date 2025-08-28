@@ -3,7 +3,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::Database;
-use crate::fsrs_scheduler::{FSRSScheduler, Rating};
+use crate::fsrs_scheduler::FSRSScheduler;
 use crate::models::*;
 
 #[derive(Clone)]
@@ -61,7 +61,7 @@ impl CardService {
         self.db.update_card_content(&card).await?;
 
         // Handle topic updates if provided
-        if let Some(topic_ids) = request.topic_ids {
+        if let Some(_topic_ids) = request.topic_ids {
             // This would require additional methods in Database to handle topic updates
             // For now, we'll skip this part but it should be implemented
         }
@@ -119,7 +119,8 @@ impl CardService {
         Ok(Some(updated_card))
     }
 
-    pub async fn get_cards_by_topic(&self, topic_id: Uuid) -> Result<Vec<Card>> {
+    #[allow(dead_code)]
+    pub async fn get_cards_by_topic(&self, _topic_id: Uuid) -> Result<Vec<Card>> {
         // This would require additional database methods
         // For now, return empty vector
         Ok(Vec::new())
