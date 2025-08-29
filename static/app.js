@@ -432,6 +432,9 @@ class LearningSystem {
                             </div>
                         ` : ''}
                     </div>
+                    <div class="card-links-section" id="card-links-${card.id}">
+                        <!-- Linked cards will be loaded here -->
+                    </div>
                     <div class="card-actions">
                         <button class="icon-btn edit-btn" onclick="app.editCard('${card.id}')" title="Edit card">
                             <i data-feather="edit"></i>
@@ -452,6 +455,70 @@ class LearningSystem {
         // Re-initialize Feather icons for new content
         if (window.feather) {
             feather.replace();
+        }
+        
+        // Load linked cards for each card
+        cards.forEach(card => {
+            this.loadLinkedCardsForCard(card.id);
+        });
+    }
+
+    async loadLinkedCardsForCard(cardId) {
+        try {
+            const linkedCards = await this.apiCall(`/cards/${cardId}/links`);
+            this.renderLinkedCards(cardId, linkedCards);
+        } catch (error) {
+            // Silently fail - not all cards have links
+        }
+    }
+
+    renderLinkedCards(cardId, linkedCards) {
+        const container = document.getElementById(`card-links-${cardId}`);
+        if (!container || linkedCards.length === 0) {
+            return;
+        }
+
+        const linksHtml = `
+            <div class="linked-cards">
+                <div class="linked-cards-header">
+                    <i data-feather="link"></i>
+                    <span>Linked Cards (${linkedCards.length})</span>
+                </div>
+                <div class="linked-cards-list">
+                    ${linkedCards.map(linkedCard => `
+                        <a href="#" class="linked-card-item" onclick="app.navigateToCard('${linkedCard.id}'); return false;">
+                            <span class="linked-card-zettel">${linkedCard.zettel_id}</span>
+                            <span class="linked-card-preview">${this.truncateText(linkedCard.content, 80)}</span>
+                        </a>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = linksHtml;
+        
+        // Re-initialize Feather icons for the linked cards section
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + '...';
+    }
+
+    navigateToCard(cardId) {
+        // Scroll to the card and highlight it temporarily
+        const cardElement = document.querySelector(`[data-id="${cardId}"]`);
+        if (cardElement) {
+            cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            cardElement.classList.add('highlighted');
+            setTimeout(() => {
+                cardElement.classList.remove('highlighted');
+            }, 2000);
         }
     }
 
@@ -506,7 +573,7 @@ class LearningSystem {
             zettel_id: zettelId,
             content,
             topic_ids,
-            links: linksText ? linksText.split(',').map(l => l.trim()) : null
+            zettel_links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
         };
 
         try {
@@ -845,15 +912,16 @@ class LearningSystem {
             document.getElementById('edit-card-zettel-id').value = card.zettel_id;
             document.getElementById('edit-card-content').value = card.content;
             
-            // Parse links if they exist
-            if (card.links) {
-                try {
-                    const links = JSON.parse(card.links);
-                    document.getElementById('edit-card-links').value = links.join(', ');
-                } catch (e) {
+            // Get linked cards and display their Zettel IDs
+            try {
+                const linkedCards = await this.apiCall(`/cards/${card.id}/links`);
+                if (linkedCards.length > 0) {
+                    const zettelIds = linkedCards.map(linkedCard => linkedCard.zettel_id);
+                    document.getElementById('edit-card-links').value = zettelIds.join(', ');
+                } else {
                     document.getElementById('edit-card-links').value = '';
                 }
-            } else {
+            } catch (e) {
                 document.getElementById('edit-card-links').value = '';
             }
             
@@ -874,7 +942,7 @@ class LearningSystem {
         const updateData = {
             zettel_id: zettelId || null,
             content: content || null,
-            links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
+            zettel_links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
         };
 
         try {

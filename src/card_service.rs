@@ -25,6 +25,23 @@ impl CardService {
         self.db.create_card(request).await
     }
 
+    pub async fn create_card_with_zettel_links(&self, request: CreateCardWithZettelLinksRequest) -> Result<Card> {
+        let links = if let Some(zettel_links) = request.zettel_links {
+            Some(self.resolve_zettel_ids_to_uuids(&zettel_links).await?)
+        } else {
+            None
+        };
+
+        let create_request = CreateCardRequest {
+            zettel_id: request.zettel_id,
+            content: request.content,
+            topic_ids: request.topic_ids,
+            links,
+        };
+
+        self.db.create_card(create_request).await
+    }
+
     pub async fn get_card(&self, id: Uuid) -> Result<Option<Card>> {
         self.db.get_card(id).await
     }
@@ -67,6 +84,23 @@ impl CardService {
         }
 
         Ok(Some(card))
+    }
+
+    pub async fn update_card_with_zettel_links(&self, id: Uuid, request: UpdateCardWithZettelLinksRequest) -> Result<Option<Card>> {
+        let links = if let Some(zettel_links) = request.zettel_links {
+            Some(self.resolve_zettel_ids_to_uuids(&zettel_links).await?)
+        } else {
+            None
+        };
+
+        let update_request = UpdateCardRequest {
+            zettel_id: request.zettel_id,
+            content: request.content,
+            topic_ids: request.topic_ids,
+            links,
+        };
+
+        self.update_card(id, update_request).await
     }
 
     pub async fn delete_card(&self, id: Uuid) -> Result<bool> {
@@ -150,6 +184,24 @@ impl CardService {
         } else {
             Ok(Vec::new())
         }
+    }
+
+    pub async fn resolve_zettel_ids_to_uuids(&self, zettel_ids: &[String]) -> Result<Vec<Uuid>> {
+        let mut uuids = Vec::new();
+        
+        for zettel_id in zettel_ids {
+            let zettel_id = zettel_id.trim();
+            if zettel_id.is_empty() {
+                continue;
+            }
+            
+            match self.db.get_card_by_zettel_id(zettel_id).await? {
+                Some(card) => uuids.push(card.id),
+                None => return Err(anyhow::anyhow!("Card with Zettel ID '{}' not found", zettel_id)),
+            }
+        }
+        
+        Ok(uuids)
     }
 }
 
@@ -310,6 +362,83 @@ mod tests {
         let topics = service.get_all_topics().await.unwrap();
         assert_eq!(topics.len(), 1);
         assert_eq!(topics[0].name, "Test Topic");
+    }
+
+    #[tokio::test]
+    async fn test_card_service_zettel_id_linking() {
+        let service = create_test_service().await;
+
+        // Create three cards
+        let card1 = service.create_card(CreateCardRequest {
+            zettel_id: "1.1".to_string(),
+            content: "Card 1 content".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        let _card2 = service.create_card(CreateCardRequest {
+            zettel_id: "1.2".to_string(),
+            content: "Card 2 content".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        let _card3 = service.create_card(CreateCardRequest {
+            zettel_id: "2.1".to_string(),
+            content: "Card 3 content".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        // Test linking by Zettel IDs (this will be the new functionality)
+        let zettel_links = vec!["1.2".to_string(), "2.1".to_string()];
+        let link_ids = service.resolve_zettel_ids_to_uuids(&zettel_links).await.unwrap();
+        
+        // Update card1 to link to cards 2 and 3 by Zettel ID
+        let update_request = UpdateCardRequest {
+            zettel_id: None,
+            content: None,
+            topic_ids: None,
+            links: Some(link_ids),
+        };
+
+        service.update_card(card1.id, update_request).await.unwrap();
+
+        // Test getting linked cards
+        let linked_cards = service.get_linked_cards(card1.id).await.unwrap();
+        assert_eq!(linked_cards.len(), 2);
+        
+        let linked_zettel_ids: Vec<String> = linked_cards.iter().map(|c| c.zettel_id.clone()).collect();
+        assert!(linked_zettel_ids.contains(&"1.2".to_string()));
+        assert!(linked_zettel_ids.contains(&"2.1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_zettel_ids_invalid() {
+        let service = create_test_service().await;
+
+        // Test with nonexistent Zettel IDs
+        let invalid_zettel_ids = vec!["999.999".to_string(), "invalid-id".to_string()];
+        let result = service.resolve_zettel_ids_to_uuids(&invalid_zettel_ids).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_zettel_ids_mixed() {
+        let service = create_test_service().await;
+
+        // Create one valid card
+        let _card = service.create_card(CreateCardRequest {
+            zettel_id: "valid.1".to_string(),
+            content: "Valid card".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+
+        // Test with mix of valid and invalid Zettel IDs
+        let mixed_zettel_ids = vec!["valid.1".to_string(), "invalid.999".to_string()];
+        let result = service.resolve_zettel_ids_to_uuids(&mixed_zettel_ids).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]

@@ -2,6 +2,8 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use serde_json::{json, Value};
 use learning_system::{api::*, CardService, Database, LLMService};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 async fn create_test_server() -> TestServer {
     let database = Database::new("sqlite::memory:").await.unwrap();
@@ -10,6 +12,7 @@ async fn create_test_server() -> TestServer {
     let app_state = AppState {
         card_service,
         llm_service,
+        review_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
     
     let application = create_router(app_state);

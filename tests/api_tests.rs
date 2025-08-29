@@ -3,6 +3,8 @@ use axum_test::TestServer;
 use serde_json::{json, Value};
 use learning_system::{api::*, CardService, Database, LLMService};
 use uuid::Uuid;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 async fn create_test_server() -> TestServer {
     let db = Database::new("sqlite::memory:").await.unwrap();
@@ -11,6 +13,7 @@ async fn create_test_server() -> TestServer {
     let app_state = AppState {
         card_service,
         llm_service,
+        review_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
     
     let app = create_router(app_state);
@@ -379,7 +382,7 @@ async fn test_api_card_with_links() {
         "zettel_id": "API-010",
         "content": "Card 1",
         "topic_ids": [],
-        "links": null
+        "zettel_links": null
     });
 
     let create_response1 = server
@@ -396,7 +399,7 @@ async fn test_api_card_with_links() {
         "zettel_id": "API-011",
         "content": "Card 2 with links",
         "topic_ids": [],
-        "links": [card1_id]
+        "zettel_links": ["API-010"]
     });
 
     let create_response2 = server

@@ -53,11 +53,27 @@ pub struct CreateCardRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCardWithZettelLinksRequest {
+    pub zettel_id: String,
+    pub content: String,
+    pub topic_ids: Vec<Uuid>,
+    pub zettel_links: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateCardRequest {
     pub zettel_id: Option<String>,
     pub content: Option<String>,
     pub topic_ids: Option<Vec<Uuid>>,
     pub links: Option<Vec<Uuid>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCardWithZettelLinksRequest {
+    pub zettel_id: Option<String>,
+    pub content: Option<String>,
+    pub topic_ids: Option<Vec<Uuid>>,
+    pub zettel_links: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

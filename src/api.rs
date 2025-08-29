@@ -69,9 +69,9 @@ impl<T> ApiResponse<T> {
 // Card endpoints
 pub async fn create_card(
     State(state): State<AppState>,
-    Json(request): Json<CreateCardRequest>,
+    Json(request): Json<CreateCardWithZettelLinksRequest>,
 ) -> Result<Json<ApiResponse<Card>>, StatusCode> {
-    match state.card_service.create_card(request).await {
+    match state.card_service.create_card_with_zettel_links(request).await {
         Ok(card) => Ok(Json(ApiResponse::success(card))),
         Err(e) => {
             eprintln!("Error creating card: {}", e);
@@ -80,6 +80,8 @@ pub async fn create_card(
                 Ok(Json(ApiResponse::error(error_msg)))
             } else if error_msg.contains("required") {
                 Ok(Json(ApiResponse::error("Zettel ID is required".to_string())))
+            } else if error_msg.contains("not found") {
+                Ok(Json(ApiResponse::error(error_msg)))
             } else {
                 Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
@@ -118,14 +120,19 @@ pub async fn get_card_by_zettel_id(
 pub async fn update_card(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(request): Json<UpdateCardRequest>,
+    Json(request): Json<UpdateCardWithZettelLinksRequest>,
 ) -> Result<Json<ApiResponse<Card>>, StatusCode> {
-    match state.card_service.update_card(id, request).await {
+    match state.card_service.update_card_with_zettel_links(id, request).await {
         Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
             eprintln!("Error updating card: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error_msg = e.to_string();
+            if error_msg.contains("not found") {
+                Ok(Json(ApiResponse::error(error_msg)))
+            } else {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 }
