@@ -7,7 +7,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+use chrono::Utc;
 
 use crate::{
     card_service::CardService,
@@ -19,6 +22,7 @@ use crate::{
 pub struct AppState {
     pub card_service: CardService,
     pub llm_service: LLMService,
+    pub review_sessions: Arc<Mutex<HashMap<Uuid, ReviewSession>>>,
 }
 
 #[derive(Deserialize)]
@@ -30,6 +34,7 @@ pub struct ReviewRequest {
 pub struct QuizAnswerRequest {
     pub answer: String,
 }
+
 
 #[derive(Deserialize)]
 pub struct SearchParams {
@@ -206,6 +211,81 @@ pub async fn get_topics(
     }
 }
 
+// Review session endpoints
+pub async fn start_review_session(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<ReviewSession>>, StatusCode> {
+    // Get cards due for review
+    let due_cards = match state.card_service.get_cards_due_for_review().await {
+        Ok(cards) => cards,
+        Err(e) => {
+            eprintln!("Error getting due cards: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    if due_cards.is_empty() {
+        let empty_session = ReviewSession {
+            session_id: Uuid::new_v4(),
+            cards: vec![],
+            questions: HashMap::new(),
+            current_card: 0,
+            created_at: Utc::now(),
+        };
+        return Ok(Json(ApiResponse::success(empty_session)));
+    }
+
+    // Generate questions for all cards upfront
+    let mut all_questions = HashMap::new();
+    for card in &due_cards {
+        match state.llm_service.generate_quiz_questions(card).await {
+            Ok(questions) => {
+                all_questions.insert(card.id, questions);
+            }
+            Err(e) => {
+                eprintln!("Error generating quiz for card {}: {}", card.id, e);
+                // Fallback to local generation
+                match state.llm_service.generate_quiz_questions_local(card, "").await {
+                    Ok(questions) => {
+                        all_questions.insert(card.id, questions);
+                    }
+                    Err(_) => {
+                        // Skip this card if we can't generate questions
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+
+    let session = ReviewSession {
+        session_id: Uuid::new_v4(),
+        cards: due_cards,
+        questions: all_questions,
+        current_card: 0,
+        created_at: Utc::now(),
+    };
+
+    // Store session in memory
+    {
+        let mut sessions = state.review_sessions.lock().unwrap();
+        sessions.insert(session.session_id, session.clone());
+    }
+
+    Ok(Json(ApiResponse::success(session)))
+}
+
+pub async fn get_review_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<ApiResponse<ReviewSession>>, StatusCode> {
+    let sessions = state.review_sessions.lock().unwrap();
+    match sessions.get(&session_id) {
+        Some(session) => Ok(Json(ApiResponse::success(session.clone()))),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
 // Quiz endpoints
 pub async fn generate_quiz(
     State(state): State<AppState>,
@@ -233,6 +313,8 @@ pub async fn generate_quiz(
     }
 }
 
+
+// Legacy endpoint - kept for backward compatibility
 pub async fn submit_quiz_answer(
     State(state): State<AppState>,
     Path(card_id): Path<Uuid>,
@@ -247,13 +329,12 @@ pub async fn submit_quiz_answer(
         }
     };
 
-    // For now, we'll need to store the question somewhere or pass it in the request
-    // This is a simplified version - in a real app, you'd store the active quiz session
+    // For backward compatibility, generate a simple question
     let dummy_question = QuizQuestion {
-        question: "What is the main concept?".to_string(),
+        question: "What is the main concept described in this card?".to_string(),
         question_type: "short_answer".to_string(),
         options: None,
-        correct_answer: Some("Based on card content".to_string()),
+        correct_answer: Some("Based on the card content".to_string()),
     };
 
     match state.llm_service.grade_answer(&card, &dummy_question, &request.answer).await {
@@ -331,6 +412,10 @@ pub fn create_router(state: AppState) -> Router {
         // Quiz routes
         .route("/api/cards/:id/quiz", get(generate_quiz))
         .route("/api/cards/:id/quiz/answer", post(submit_quiz_answer))
+        
+        // Review session routes
+        .route("/api/review/session/start", post(start_review_session))
+        .route("/api/review/session/:id", get(get_review_session))
         
         // Review routes
         .route("/api/cards/:id/review", post(review_card))

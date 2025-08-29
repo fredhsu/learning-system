@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -75,4 +76,19 @@ pub struct QuizResponse {
     pub is_correct: bool,
     pub feedback: String,
     pub rating: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewSession {
+    pub session_id: Uuid,
+    pub cards: Vec<Card>,
+    pub questions: HashMap<Uuid, Vec<QuizQuestion>>,
+    pub current_card: usize,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizAnswerWithContext {
+    pub question_index: usize,
+    pub answer: String,
 }

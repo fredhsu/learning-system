@@ -88,7 +88,7 @@ impl LLMService {
             messages: vec![
                 LLMMessage {
                     role: "system".to_string(),
-                    content: "You are an expert quiz generator. Always respond with valid JSON in the requested format.".to_string(),
+                    content: "You are a university professor. Always respond with valid JSON in the requested format.".to_string(),
                 },
                 LLMMessage {
                     role: "user".to_string(),
@@ -137,7 +137,7 @@ impl LLMService {
         user_answer: &str,
     ) -> Result<GradingResult> {
         let prompt = format!(
-            r#"Grade the following quiz answer based on the original card content.
+            r#"Grade the following quiz answer based on semantic understanding and conceptual accuracy, not just literal text matching.
 
             Card Content:
             {}
@@ -147,20 +147,38 @@ impl LLMService {
             Correct Answer: {}
             User's Answer: {}
 
-            Please evaluate the answer and respond with a JSON object in this exact format:
+            GRADING PRINCIPLES:
+            - Accept semantically equivalent answers (synonyms, paraphrasing, different valid explanations)
+            - For multiple choice: Accept the correct option letter OR the full option text
+            - For numerical answers: Accept equivalent forms (0.5 = 1/2 = 50%)
+            - For short answers: Focus on key concepts rather than exact wording
+            - Consider context from the card content when evaluating answers
+            - Give credit for partially correct answers that show understanding
+
+            EXAMPLES OF EQUIVALENT ANSWERS:
+            - "Quick" = "Fast" = "Rapid" (synonyms)
+            - "Machine Learning" = "ML" (abbreviations)  
+            - "Because it increases efficiency" = "It makes things more efficient" (paraphrasing)
+            - "Option A" = "A" = "[Full text of option A]" (multiple choice formats)
+
+            GRADING CRITERIA:
+            - CORRECT (is_correct: true): Answer demonstrates understanding of key concepts, even if wording differs
+            - INCORRECT (is_correct: false): Answer shows fundamental misunderstanding or is completely wrong
+
+            Please respond with a JSON object in this exact format:
             {{
                 "is_correct": true|false,
-                "feedback": "Detailed feedback explaining why the answer is correct/incorrect and providing the right information",
+                "feedback": "Specific feedback explaining the evaluation, mentioning what was correct/incorrect and providing the complete correct information",
                 "suggested_rating": 1|2|3|4
             }}
 
-            Rating Guidelines:
-            - 1 (Again): Completely wrong or no understanding shown
-            - 2 (Hard): Partially correct but significant gaps or errors
-            - 3 (Good): Mostly correct with minor issues or good understanding shown
-            - 4 (Easy): Perfect or excellent answer demonstrating clear mastery
+            Rating Guidelines (be generous for conceptually correct answers):
+            - 1 (Again): Fundamentally wrong or no understanding demonstrated
+            - 2 (Hard): Shows some understanding but with significant conceptual errors
+            - 3 (Good): Correct understanding with minor wording differences or small omissions
+            - 4 (Easy): Perfect or excellent answer with clear mastery
 
-            Be constructive in feedback and help the user learn."#,
+            Focus on conceptual understanding rather than exact text matching. When in doubt between correct/incorrect, lean toward giving credit if the core concept is understood."#,
             card.content,
             question.question,
             question.question_type,
@@ -173,7 +191,7 @@ impl LLMService {
             messages: vec![
                 LLMMessage {
                     role: "system".to_string(),
-                    content: "You are an expert teacher and grader. Always respond with valid JSON in the requested format.".to_string(),
+                    content: "You are an expert teacher focused on fair, understanding-based grading. Prioritize semantic meaning over exact text matching. Accept equivalent answers that demonstrate understanding. Always respond with valid JSON in the requested format.".to_string(),
                 },
                 LLMMessage {
                     role: "user".to_string(),

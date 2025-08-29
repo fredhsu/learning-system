@@ -12,7 +12,9 @@ use axum::{
     routing::get,
     Router,
 };
+use std::collections::HashMap;
 use std::env;
+use std::sync::{Arc, Mutex};
 use tokio::fs;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
@@ -55,6 +57,7 @@ async fn main() -> Result<()> {
     let state = AppState {
         card_service,
         llm_service,
+        review_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
     // Build the application router
