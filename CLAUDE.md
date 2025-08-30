@@ -27,6 +27,7 @@ This is a knowledge management and spaced repetition learning platform built in 
 - **topics**: Hierarchical organization system  
 - **card_topics**: Many-to-many relationship mapping
 - **reviews**: FSRS statistics and review history tracking
+- **backlinks**: Bidirectional linking system for reverse card relationships
 
 ## Development Commands
 
@@ -56,7 +57,7 @@ cargo fmt            # Code formatting
 The system uses the rs-fsrs crate for spaced repetition scheduling. Review intervals and difficulty ratings are managed through FSRS state updates after each quiz attempt. Keyboard shortcuts (1-4) map directly to FSRS rating levels (Again, Hard, Good, Easy).
 
 ### Card Linking System
-Cards support wiki-style bidirectional linking. The linking mechanism should preserve referential integrity and support efficient graph traversal for related content discovery.
+Cards support wiki-style bidirectional linking with automatic backlink maintenance. When Card A links to Card B, Card B automatically shows Card A in its backlinks section. The linking mechanism preserves referential integrity through foreign key constraints and supports efficient graph traversal for related content discovery. Non-existent link targets are gracefully handled.
 
 ### LLM Integration Points
 - Quiz question generation from card content
@@ -66,8 +67,9 @@ Cards support wiki-style bidirectional linking. The linking mechanism should pre
 ### Database Constraints
 - SQLite is used for simplicity and portability
 - FSRS statistics must be atomically updated with review submissions
-- Card content supports LaTeX/MathJax markup for mathematical expressions
+- Card content supports LaTeX/MathJax markup for mathematical expressions (both inline `$...$` and display `$$...$$`)
 - Search functionality uses case-insensitive LIKE queries for content matching
+- Backlinks maintain referential integrity through CASCADE DELETE foreign key constraints
 
 ### Frontend Architecture
 - **Design System**: CSS custom properties for consistent spacing, typography, and colors
@@ -83,6 +85,8 @@ Cards support wiki-style bidirectional linking. The linking mechanism should pre
 - **Navigation**: Icon-enhanced navigation with Feather Icons (layers, refresh-cw, tag icons)
 - **Search**: Real-time search with debouncing, highlighting, and case-insensitive matching  
 - **Cards**: Preview system for long content with expand/collapse functionality
+- **Linking**: Bidirectional backlinks with automatic maintenance and distinct visual styling
+- **Math Rendering**: Full LaTeX support with inline `$...$` and display `$$...$$` math
 - **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), and completion celebrations
 - **Responsive**: Mobile-first design with touch-friendly interactions
 - **Feedback**: Toast notifications, skeleton loading, and enhanced error handling
@@ -90,19 +94,24 @@ Cards support wiki-style bidirectional linking. The linking mechanism should pre
 
 ### API Enhancements
 - **Search Endpoint**: `/api/cards/search?q={query}` with URL encoding support
+- **Linking Endpoints**: `/api/cards/:id/links` and `/api/cards/:id/backlinks` for bidirectional navigation
 - **Enhanced Responses**: Consistent JSON structure with success/error states
 - **Performance**: Optimized for skeleton loading and progressive enhancement
 
 ### Testing Coverage
-- **Integration Tests**: Search functionality, UI preview, keyboard shortcuts
-- **API Tests**: Search endpoints, response structure validation, URL encoding
+- **Integration Tests**: Search functionality, UI preview, keyboard shortcuts, comprehensive backlink scenarios
+- **API Tests**: Search endpoints, response structure validation, URL encoding, backlinks API
+- **Database Tests**: Backlink CRUD operations, foreign key constraints, cascade deletions
 - **UI Feature Tests**: Navigation icons, loading states, responsive design validation
-- **Error Handling**: Edge cases, concurrent operations, invalid data handling
+- **Error Handling**: Edge cases, concurrent operations, invalid data handling, non-existent link targets
 
 ### Development Notes
 - All Phase 2 medium priority tasks from UI_IMPROVEMENTS.md completed
-- Comprehensive test suite ensures stability across UI enhancements
+- Bidirectional backlinks system fully implemented and tested
+- LaTeX rendering supports both inline and display math expressions
+- Comprehensive test suite ensures stability across UI enhancements and linking system
 - Design system provides consistent foundation for future development
 - Mobile-first responsive approach supports modern device usage patterns
 
+**Latest Update**: Backlinks and enhanced LaTeX rendering implemented with full test coverage
 **Next Phase**: Ready for Phase 3 advanced features (dark mode, study statistics, advanced filtering)

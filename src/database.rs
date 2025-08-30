@@ -472,6 +472,54 @@ impl Database {
 
         Ok(())
     }
+
+    pub async fn get_cards_linking_to(&self, target_card_id: Uuid) -> Result<Vec<Card>> {
+        let rows = sqlx::query(
+            "SELECT * FROM cards WHERE links IS NOT NULL AND links != '[]'"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut linking_cards = Vec::new();
+        for row in rows {
+            if let Some(links_json) = row.get::<Option<String>, _>("links") {
+                if let Ok(link_ids) = serde_json::from_str::<Vec<Uuid>>(&links_json) {
+                    if link_ids.contains(&target_card_id) {
+                        linking_cards.push(Card {
+                            id: Uuid::parse_str(&row.get::<String, _>("id"))?,
+                            zettel_id: row.get("zettel_id"),
+                            content: row.get("content"),
+                            creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
+                            last_reviewed: row.get::<Option<String>, _>("last_reviewed")
+                                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                            next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
+                            difficulty: row.get("difficulty"),
+                            stability: row.get("stability"),
+                            retrievability: row.get("retrievability"),
+                            reps: row.get("reps"),
+                            lapses: row.get("lapses"),
+                            state: row.get("state"),
+                            links: Some(links_json),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(linking_cards)
+    }
+
+    pub async fn find_cards_referencing_zettel_id(&self, zettel_id: &str) -> Result<Vec<Card>> {
+        let search_pattern = format!("%{}%", zettel_id);
+        let rows = sqlx::query(
+            "SELECT * FROM cards WHERE content LIKE ?1 ORDER BY creation_date DESC"
+        )
+        .bind(&search_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        self.rows_to_cards(rows)
+    }
 }
 
 #[cfg(test)]

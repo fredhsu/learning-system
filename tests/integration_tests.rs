@@ -829,3 +829,200 @@ async fn test_backlinks_with_zettel_linking() {
     assert_eq!(backlinks_b.len(), 1);
     assert_eq!(backlinks_b[0].zettel_id, "ZETTEL-A");
 }
+
+#[tokio::test]
+async fn test_zettel_id_change_with_references() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create a card with original Zettel ID
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "ORIGINAL-ID".to_string(),
+        content: "This is the original card".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Create another card that references the first card in its content
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "REFERENCING-CARD".to_string(),
+        content: "This card references ORIGINAL-ID in its text content".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Create a third card that links to card A by UUID
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_a.id]),
+    };
+    let card_c = card_service.create_card(CreateCardRequest {
+        zettel_id: "LINKING-CARD".to_string(),
+        content: "This card has a UUID link to the original card".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+    card_service.update_card(card_c.id, update_request).await.unwrap();
+
+    // Verify initial state
+    let backlinks = card_service.get_backlinks(card_a.id).await.unwrap();
+    assert_eq!(backlinks.len(), 1);
+    assert_eq!(backlinks[0].id, card_c.id);
+
+    // Change the Zettel ID of card A
+    let update_request = UpdateCardRequest {
+        zettel_id: Some("NEW-ID".to_string()),
+        content: None,
+        topic_ids: None,
+        links: None,
+    };
+    let updated_card_a = card_service.update_card(card_a.id, update_request).await.unwrap();
+    assert!(updated_card_a.is_some());
+    assert_eq!(updated_card_a.unwrap().zettel_id, "NEW-ID");
+
+    // Verify that UUID-based links and backlinks still work correctly
+    let backlinks_after_change = card_service.get_backlinks(card_a.id).await.unwrap();
+    assert_eq!(backlinks_after_change.len(), 1);
+    assert_eq!(backlinks_after_change[0].id, card_c.id);
+
+    // Verify that forward links still work
+    let forward_links = card_service.get_linked_cards(card_c.id).await.unwrap();
+    assert_eq!(forward_links.len(), 1);
+    assert_eq!(forward_links[0].id, card_a.id);
+    assert_eq!(forward_links[0].zettel_id, "NEW-ID"); // Should reflect the new Zettel ID
+
+    // Verify that the card can still be found by its new Zettel ID
+    let card_by_new_id = card_service.get_card_by_zettel_id("NEW-ID").await.unwrap();
+    assert!(card_by_new_id.is_some());
+    assert_eq!(card_by_new_id.unwrap().id, card_a.id);
+
+    // Verify that the old Zettel ID no longer resolves to the card
+    let card_by_old_id = card_service.get_card_by_zettel_id("ORIGINAL-ID").await.unwrap();
+    assert!(card_by_old_id.is_none());
+}
+
+#[tokio::test]
+async fn test_zettel_id_duplicate_prevention() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create two cards with different Zettel IDs
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "CARD-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "CARD-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Try to change card A's Zettel ID to card B's Zettel ID (should fail)
+    let update_request = UpdateCardRequest {
+        zettel_id: Some("CARD-B".to_string()),
+        content: None,
+        topic_ids: None,
+        links: None,
+    };
+    let result = card_service.update_card(card_a.id, update_request).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("already exists"));
+
+    // Verify that card A's Zettel ID hasn't changed
+    let card_a_check = card_service.get_card(card_a.id).await.unwrap();
+    assert!(card_a_check.is_some());
+    assert_eq!(card_a_check.unwrap().zettel_id, "CARD-A");
+}
+
+#[tokio::test]
+async fn test_zettel_id_change_preserves_all_relationships() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create a complex linking scenario
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "CENTRAL-CARD".to_string(),
+        content: "Central card with many relationships".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "LINKED-CARD-1".to_string(),
+        content: "Card 1".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_c = card_service.create_card(CreateCardRequest {
+        zettel_id: "LINKED-CARD-2".to_string(),
+        content: "Card 2".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Set up bidirectional links
+    // A links to B and C
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_b.id, card_c.id]),
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // B links to A  
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_a.id]),
+    };
+    card_service.update_card(card_b.id, update_request).await.unwrap();
+
+    // Verify initial state
+    let forward_links_a = card_service.get_linked_cards(card_a.id).await.unwrap();
+    assert_eq!(forward_links_a.len(), 2);
+    let backlinks_a = card_service.get_backlinks(card_a.id).await.unwrap();
+    assert_eq!(backlinks_a.len(), 1);
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 1);
+    let backlinks_c = card_service.get_backlinks(card_c.id).await.unwrap();
+    assert_eq!(backlinks_c.len(), 1);
+
+    // Change the Zettel ID of the central card
+    let update_request = UpdateCardRequest {
+        zettel_id: Some("NEW-CENTRAL-CARD".to_string()),
+        content: None,
+        topic_ids: None,
+        links: None,
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // Verify all relationships are preserved
+    let forward_links_a_after = card_service.get_linked_cards(card_a.id).await.unwrap();
+    assert_eq!(forward_links_a_after.len(), 2);
+    let forward_link_ids: Vec<Uuid> = forward_links_a_after.iter().map(|c| c.id).collect();
+    assert!(forward_link_ids.contains(&card_b.id));
+    assert!(forward_link_ids.contains(&card_c.id));
+
+    let backlinks_a_after = card_service.get_backlinks(card_a.id).await.unwrap();
+    assert_eq!(backlinks_a_after.len(), 1);
+    assert_eq!(backlinks_a_after[0].id, card_b.id);
+
+    let backlinks_b_after = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b_after.len(), 1);
+    assert_eq!(backlinks_b_after[0].id, card_a.id);
+    assert_eq!(backlinks_b_after[0].zettel_id, "NEW-CENTRAL-CARD"); // Should show new ID
+
+    let backlinks_c_after = card_service.get_backlinks(card_c.id).await.unwrap();
+    assert_eq!(backlinks_c_after.len(), 1);
+    assert_eq!(backlinks_c_after[0].id, card_a.id);
+    assert_eq!(backlinks_c_after[0].zettel_id, "NEW-CENTRAL-CARD"); // Should show new ID
+}

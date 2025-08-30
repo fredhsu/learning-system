@@ -82,14 +82,44 @@ impl CardService {
             Vec::new()
         };
 
-        if let Some(zettel_id) = request.zettel_id {
+        if let Some(new_zettel_id) = request.zettel_id {
             // Validate that the new zettel_id doesn't already exist (unless it's the same card)
-            if let Some(existing) = self.db.get_card_by_zettel_id(&zettel_id).await? {
+            if let Some(existing) = self.db.get_card_by_zettel_id(&new_zettel_id).await? {
                 if existing.id != card.id {
-                    return Err(anyhow::anyhow!("Zettelkasten ID '{}' already exists", zettel_id));
+                    return Err(anyhow::anyhow!("Zettelkasten ID '{}' already exists", new_zettel_id));
                 }
             }
-            card.zettel_id = zettel_id;
+            
+            let old_zettel_id = card.zettel_id.clone();
+            card.zettel_id = new_zettel_id.clone();
+            
+            // Handle Zettel ID change by checking for textual references
+            // Note: The UUID-based links and backlinks will continue to work correctly
+            // as they reference the card by its immutable UUID, not the Zettel ID
+            if old_zettel_id != new_zettel_id {
+                // Check if any other cards reference the old Zettel ID in their content
+                match self.db.find_cards_referencing_zettel_id(&old_zettel_id).await {
+                    Ok(referencing_cards) => {
+                        let referencing_others: Vec<_> = referencing_cards
+                            .into_iter()
+                            .filter(|c| c.id != card.id) // Exclude self-references
+                            .collect();
+                        
+                        if !referencing_others.is_empty() {
+                            eprintln!(
+                                "Warning: Zettel ID changed from '{}' to '{}' for card {}. Found {} other cards that may reference the old ID in their content.",
+                                old_zettel_id, new_zettel_id, card.id, referencing_others.len()
+                            );
+                            for ref_card in referencing_others {
+                                eprintln!("  - Card '{}' ({})", ref_card.zettel_id, ref_card.id);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Could not check for textual references to old Zettel ID '{}': {}", old_zettel_id, e);
+                    }
+                }
+            }
         }
 
         if let Some(content) = request.content {
