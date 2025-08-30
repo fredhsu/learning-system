@@ -465,35 +465,64 @@ class LearningSystem {
 
     async loadLinkedCardsForCard(cardId) {
         try {
-            const linkedCards = await this.apiCall(`/cards/${cardId}/links`);
-            this.renderLinkedCards(cardId, linkedCards);
+            // Load both forward links and backlinks
+            const [linkedCards, backlinks] = await Promise.all([
+                this.apiCall(`/cards/${cardId}/links`).catch(() => []),
+                this.apiCall(`/cards/${cardId}/backlinks`).catch(() => [])
+            ]);
+            this.renderLinkedCards(cardId, linkedCards, backlinks);
         } catch (error) {
             // Silently fail - not all cards have links
         }
     }
 
-    renderLinkedCards(cardId, linkedCards) {
+    renderLinkedCards(cardId, linkedCards, backlinks = []) {
         const container = document.getElementById(`card-links-${cardId}`);
-        if (!container || linkedCards.length === 0) {
+        if (!container || (linkedCards.length === 0 && backlinks.length === 0)) {
             return;
         }
 
-        const linksHtml = `
-            <div class="linked-cards">
-                <div class="linked-cards-header">
-                    <i data-feather="link"></i>
-                    <span>Linked Cards (${linkedCards.length})</span>
+        let linksHtml = '';
+        
+        // Render forward links
+        if (linkedCards.length > 0) {
+            linksHtml += `
+                <div class="linked-cards">
+                    <div class="linked-cards-header">
+                        <i data-feather="link"></i>
+                        <span>Linked Cards (${linkedCards.length})</span>
+                    </div>
+                    <div class="linked-cards-list">
+                        ${linkedCards.map(linkedCard => `
+                            <a href="#" class="linked-card-item" onclick="app.navigateToCard('${linkedCard.id}'); return false;">
+                                <span class="linked-card-zettel">${linkedCard.zettel_id}</span>
+                                <span class="linked-card-preview">${this.truncateText(linkedCard.content, 80)}</span>
+                            </a>
+                        `).join('')}
+                    </div>
                 </div>
-                <div class="linked-cards-list">
-                    ${linkedCards.map(linkedCard => `
-                        <a href="#" class="linked-card-item" onclick="app.navigateToCard('${linkedCard.id}'); return false;">
-                            <span class="linked-card-zettel">${linkedCard.zettel_id}</span>
-                            <span class="linked-card-preview">${this.truncateText(linkedCard.content, 80)}</span>
-                        </a>
-                    `).join('')}
+            `;
+        }
+
+        // Render backlinks
+        if (backlinks.length > 0) {
+            linksHtml += `
+                <div class="backlinks">
+                    <div class="backlinks-header">
+                        <i data-feather="corner-down-left"></i>
+                        <span>Backlinks (${backlinks.length})</span>
+                    </div>
+                    <div class="backlinks-list">
+                        ${backlinks.map(backlinkCard => `
+                            <a href="#" class="backlink-item" onclick="app.navigateToCard('${backlinkCard.id}'); return false;">
+                                <span class="backlink-zettel">${backlinkCard.zettel_id}</span>
+                                <span class="backlink-preview">${this.truncateText(backlinkCard.content, 80)}</span>
+                            </a>
+                        `).join('')}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
 
         container.innerHTML = linksHtml;
         

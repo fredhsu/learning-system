@@ -1,4 +1,4 @@
-use learning_system::{Database, CardService, CreateCardRequest, UpdateCardRequest};
+use learning_system::{Database, CardService, CreateCardRequest, UpdateCardRequest, CreateCardWithZettelLinksRequest, UpdateCardWithZettelLinksRequest};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -475,4 +475,357 @@ async fn test_keyboard_shortcut_ratings() {
         let rating = FSRSScheduler::get_rating_from_int(invalid_rating);
         assert!(rating.is_none(), "Rating {} should be invalid", invalid_rating);
     }
+}
+
+// Backlinks functionality tests
+#[tokio::test]
+async fn test_backlinks_creation() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create three cards
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "BACKLINK-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "BACKLINK-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_c = card_service.create_card(CreateCardRequest {
+        zettel_id: "BACKLINK-C".to_string(),
+        content: "Card C".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Link card A to cards B and C
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_b.id, card_c.id]),
+    };
+
+    let updated_card_a = card_service.update_card(card_a.id, update_request).await.unwrap();
+    assert!(updated_card_a.is_some());
+
+    // Test that forward links work
+    let linked_cards = card_service.get_linked_cards(card_a.id).await.unwrap();
+    assert_eq!(linked_cards.len(), 2);
+    let linked_ids: Vec<Uuid> = linked_cards.iter().map(|c| c.id).collect();
+    assert!(linked_ids.contains(&card_b.id));
+    assert!(linked_ids.contains(&card_c.id));
+
+    // Test that backlinks are created (this will require new functionality)
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 1);
+    assert_eq!(backlinks_b[0].id, card_a.id);
+
+    let backlinks_c = card_service.get_backlinks(card_c.id).await.unwrap();
+    assert_eq!(backlinks_c.len(), 1);
+    assert_eq!(backlinks_c[0].id, card_a.id);
+
+    // Card A should have no backlinks initially
+    let backlinks_a = card_service.get_backlinks(card_a.id).await.unwrap();
+    assert_eq!(backlinks_a.len(), 0);
+}
+
+#[tokio::test]
+async fn test_backlinks_update_and_removal() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create three cards
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "BACKLINK-UPDATE-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "BACKLINK-UPDATE-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_c = card_service.create_card(CreateCardRequest {
+        zettel_id: "BACKLINK-UPDATE-C".to_string(),
+        content: "Card C".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Initially link A to B
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_b.id]),
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // Verify initial backlink
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 1);
+    assert_eq!(backlinks_b[0].id, card_a.id);
+
+    // Update A to link to C instead of B
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_c.id]),
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // Verify backlinks are updated
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 0); // B should no longer have backlinks from A
+
+    let backlinks_c = card_service.get_backlinks(card_c.id).await.unwrap();
+    assert_eq!(backlinks_c.len(), 1);
+    assert_eq!(backlinks_c[0].id, card_a.id); // C should now have backlink from A
+
+    // Remove all links from A
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![]),
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // Verify all backlinks are removed
+    let backlinks_c = card_service.get_backlinks(card_c.id).await.unwrap();
+    assert_eq!(backlinks_c.len(), 0);
+}
+
+#[tokio::test]
+async fn test_backlinks_bidirectional_linking() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create two cards
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "BIDIR-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "BIDIR-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Link A to B
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_b.id]),
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // Link B to A
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_a.id]),
+    };
+    card_service.update_card(card_b.id, update_request).await.unwrap();
+
+    // Both cards should have forward links and backlinks
+    let forward_links_a = card_service.get_linked_cards(card_a.id).await.unwrap();
+    assert_eq!(forward_links_a.len(), 1);
+    assert_eq!(forward_links_a[0].id, card_b.id);
+
+    let backlinks_a = card_service.get_backlinks(card_a.id).await.unwrap();
+    assert_eq!(backlinks_a.len(), 1);
+    assert_eq!(backlinks_a[0].id, card_b.id);
+
+    let forward_links_b = card_service.get_linked_cards(card_b.id).await.unwrap();
+    assert_eq!(forward_links_b.len(), 1);
+    assert_eq!(forward_links_b[0].id, card_a.id);
+
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 1);
+    assert_eq!(backlinks_b[0].id, card_a.id);
+}
+
+#[tokio::test]
+async fn test_backlinks_card_deletion() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create two cards
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "DELETE-BACKLINK-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "DELETE-BACKLINK-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Link A to B
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![card_b.id]),
+    };
+    card_service.update_card(card_a.id, update_request).await.unwrap();
+
+    // Verify backlink exists
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 1);
+    assert_eq!(backlinks_b[0].id, card_a.id);
+
+    // Delete card A
+    let deleted = card_service.delete_card(card_a.id).await.unwrap();
+    assert!(deleted);
+
+    // Verify backlinks to B are cleaned up
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 0);
+
+    // Verify card A is gone
+    let card_a_check = card_service.get_card(card_a.id).await.unwrap();
+    assert!(card_a_check.is_none());
+}
+
+#[tokio::test]
+async fn test_backlinks_multiple_sources() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create four cards
+    let card_a = card_service.create_card(CreateCardRequest {
+        zettel_id: "MULTI-SOURCE-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card(CreateCardRequest {
+        zettel_id: "MULTI-SOURCE-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_c = card_service.create_card(CreateCardRequest {
+        zettel_id: "MULTI-SOURCE-C".to_string(),
+        content: "Card C".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    let card_d = card_service.create_card(CreateCardRequest {
+        zettel_id: "MULTI-SOURCE-D".to_string(),
+        content: "Card D".to_string(),
+        topic_ids: vec![],
+        links: None,
+    }).await.unwrap();
+
+    // Link A to D, B to D, and C to D
+    for (source_card, source_name) in [(card_a.id, "A"), (card_b.id, "B"), (card_c.id, "C")] {
+        let update_request = UpdateCardRequest {
+            zettel_id: None,
+            content: None,
+            topic_ids: None,
+            links: Some(vec![card_d.id]),
+        };
+        card_service.update_card(source_card, update_request).await.unwrap();
+        
+        // Verify link was created
+        let linked_cards = card_service.get_linked_cards(source_card).await.unwrap();
+        assert_eq!(linked_cards.len(), 1, "Card {} should link to D", source_name);
+        assert_eq!(linked_cards[0].id, card_d.id);
+    }
+
+    // Card D should have backlinks from A, B, and C
+    let backlinks_d = card_service.get_backlinks(card_d.id).await.unwrap();
+    assert_eq!(backlinks_d.len(), 3);
+    
+    let backlink_ids: Vec<Uuid> = backlinks_d.iter().map(|c| c.id).collect();
+    assert!(backlink_ids.contains(&card_a.id));
+    assert!(backlink_ids.contains(&card_b.id));
+    assert!(backlink_ids.contains(&card_c.id));
+
+    // Remove link from B to D
+    let update_request = UpdateCardRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        links: Some(vec![]),
+    };
+    card_service.update_card(card_b.id, update_request).await.unwrap();
+
+    // Card D should now have backlinks from only A and C
+    let backlinks_d = card_service.get_backlinks(card_d.id).await.unwrap();
+    assert_eq!(backlinks_d.len(), 2);
+    
+    let backlink_ids: Vec<Uuid> = backlinks_d.iter().map(|c| c.id).collect();
+    assert!(backlink_ids.contains(&card_a.id));
+    assert!(!backlink_ids.contains(&card_b.id));
+    assert!(backlink_ids.contains(&card_c.id));
+}
+
+#[tokio::test]
+async fn test_backlinks_with_zettel_linking() {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+
+    // Create cards using zettel linking functionality
+    let card_a = card_service.create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
+        zettel_id: "ZETTEL-A".to_string(),
+        content: "Card A".to_string(),
+        topic_ids: vec![],
+        zettel_links: None,
+    }).await.unwrap();
+
+    let card_b = card_service.create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
+        zettel_id: "ZETTEL-B".to_string(),
+        content: "Card B".to_string(),
+        topic_ids: vec![],
+        zettel_links: None,
+    }).await.unwrap();
+
+    // Link A to B using zettel IDs
+    let update_request = UpdateCardWithZettelLinksRequest {
+        zettel_id: None,
+        content: None,
+        topic_ids: None,
+        zettel_links: Some(vec!["ZETTEL-B".to_string()]),
+    };
+    card_service.update_card_with_zettel_links(card_a.id, update_request).await.unwrap();
+
+    // Verify forward link
+    let linked_cards = card_service.get_linked_cards(card_a.id).await.unwrap();
+    assert_eq!(linked_cards.len(), 1);
+    assert_eq!(linked_cards[0].zettel_id, "ZETTEL-B");
+
+    // Verify backlink
+    let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
+    assert_eq!(backlinks_b.len(), 1);
+    assert_eq!(backlinks_b[0].zettel_id, "ZETTEL-A");
 }

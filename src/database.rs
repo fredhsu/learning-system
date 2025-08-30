@@ -83,6 +83,20 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS backlinks (
+                source_card_id TEXT NOT NULL,
+                target_card_id TEXT NOT NULL,
+                PRIMARY KEY (source_card_id, target_card_id),
+                FOREIGN KEY (source_card_id) REFERENCES cards(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_card_id) REFERENCES cards(id) ON DELETE CASCADE
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
@@ -391,6 +405,73 @@ impl Database {
 
         self.rows_to_cards(rows)
     }
+
+    // Backlinks operations
+    pub async fn create_backlinks(&self, source_card_id: Uuid, target_card_ids: &[Uuid]) -> Result<()> {
+        for target_card_id in target_card_ids {
+            sqlx::query(
+                "INSERT OR IGNORE INTO backlinks (source_card_id, target_card_id) VALUES (?1, ?2)"
+            )
+            .bind(source_card_id.to_string())
+            .bind(target_card_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn remove_backlinks(&self, source_card_id: Uuid, target_card_ids: &[Uuid]) -> Result<()> {
+        for target_card_id in target_card_ids {
+            sqlx::query(
+                "DELETE FROM backlinks WHERE source_card_id = ?1 AND target_card_id = ?2"
+            )
+            .bind(source_card_id.to_string())
+            .bind(target_card_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn remove_all_backlinks_from_source(&self, source_card_id: Uuid) -> Result<()> {
+        sqlx::query(
+            "DELETE FROM backlinks WHERE source_card_id = ?1"
+        )
+        .bind(source_card_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_backlinks(&self, target_card_id: Uuid) -> Result<Vec<Card>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT c.* FROM cards c
+            INNER JOIN backlinks b ON c.id = b.source_card_id
+            WHERE b.target_card_id = ?1
+            ORDER BY c.creation_date DESC
+            "#
+        )
+        .bind(target_card_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        self.rows_to_cards(rows)
+    }
+
+    pub async fn update_backlinks(&self, source_card_id: Uuid, old_target_ids: &[Uuid], new_target_ids: &[Uuid]) -> Result<()> {
+        // Remove old backlinks
+        if !old_target_ids.is_empty() {
+            self.remove_backlinks(source_card_id, old_target_ids).await?;
+        }
+
+        // Add new backlinks
+        if !new_target_ids.is_empty() {
+            self.create_backlinks(source_card_id, new_target_ids).await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -502,5 +583,129 @@ mod tests {
         let due_cards = db.get_cards_due_for_review().await.unwrap();
         assert_eq!(due_cards.len(), 1);
         assert_eq!(due_cards[0].content, "Due card");
+    }
+
+    #[tokio::test]
+    async fn test_database_backlinks_operations() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        // Create two cards
+        let card_a = db.create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-TEST-A".to_string(),
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        let card_b = db.create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-TEST-B".to_string(),
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        // Initially no backlinks
+        let backlinks = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks.len(), 0);
+        
+        // Create backlink from A to B
+        db.create_backlinks(card_a.id, &[card_b.id]).await.unwrap();
+        
+        // Verify backlink exists
+        let backlinks = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks.len(), 1);
+        assert_eq!(backlinks[0].id, card_a.id);
+        
+        // Remove backlink
+        db.remove_backlinks(card_a.id, &[card_b.id]).await.unwrap();
+        
+        // Verify backlink is gone
+        let backlinks = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_database_multiple_backlinks() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        // Create three cards
+        let card_a = db.create_card(CreateCardRequest {
+            zettel_id: "MULTI-BACKLINK-A".to_string(),
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        let card_b = db.create_card(CreateCardRequest {
+            zettel_id: "MULTI-BACKLINK-B".to_string(),
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        let card_c = db.create_card(CreateCardRequest {
+            zettel_id: "MULTI-BACKLINK-C".to_string(),
+            content: "Card C".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        // Create backlinks from A to both B and C
+        db.create_backlinks(card_a.id, &[card_b.id, card_c.id]).await.unwrap();
+        
+        // Verify both backlinks exist
+        let backlinks_b = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks_b.len(), 1);
+        assert_eq!(backlinks_b[0].id, card_a.id);
+        
+        let backlinks_c = db.get_backlinks(card_c.id).await.unwrap();
+        assert_eq!(backlinks_c.len(), 1);
+        assert_eq!(backlinks_c[0].id, card_a.id);
+        
+        // Update backlinks - remove B, keep C
+        db.update_backlinks(card_a.id, &[card_b.id, card_c.id], &[card_c.id]).await.unwrap();
+        
+        // Verify B has no backlinks, C still has one
+        let backlinks_b = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks_b.len(), 0);
+        
+        let backlinks_c = db.get_backlinks(card_c.id).await.unwrap();
+        assert_eq!(backlinks_c.len(), 1);
+        assert_eq!(backlinks_c[0].id, card_a.id);
+    }
+
+    #[tokio::test]
+    async fn test_database_backlinks_cascade_delete() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        
+        // Create two cards
+        let card_a = db.create_card(CreateCardRequest {
+            zettel_id: "CASCADE-TEST-A".to_string(),
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        let card_b = db.create_card(CreateCardRequest {
+            zettel_id: "CASCADE-TEST-B".to_string(),
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        }).await.unwrap();
+        
+        // Create backlink
+        db.create_backlinks(card_a.id, &[card_b.id]).await.unwrap();
+        
+        // Verify backlink exists
+        let backlinks = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks.len(), 1);
+        
+        // Delete source card A
+        let deleted = db.delete_card(card_a.id).await.unwrap();
+        assert!(deleted);
+        
+        // Verify backlinks are automatically cleaned up by foreign key cascade
+        let backlinks = db.get_backlinks(card_b.id).await.unwrap();
+        assert_eq!(backlinks.len(), 0);
     }
 }

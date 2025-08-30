@@ -22,7 +22,26 @@ impl CardService {
 
     // Card CRUD operations
     pub async fn create_card(&self, request: CreateCardRequest) -> Result<Card> {
-        self.db.create_card(request).await
+        let card = self.db.create_card(request).await?;
+        
+        // Create backlinks for any initial links, but only for existing cards
+        if let Some(ref links_json) = card.links {
+            let links: Vec<Uuid> = serde_json::from_str(links_json).unwrap_or_default();
+            if !links.is_empty() {
+                // Filter out non-existent cards before creating backlinks
+                let mut valid_links = Vec::new();
+                for link_id in links {
+                    if self.db.get_card(link_id).await?.is_some() {
+                        valid_links.push(link_id);
+                    }
+                }
+                if !valid_links.is_empty() {
+                    self.db.create_backlinks(card.id, &valid_links).await?;
+                }
+            }
+        }
+        
+        Ok(card)
     }
 
     pub async fn create_card_with_zettel_links(&self, request: CreateCardWithZettelLinksRequest) -> Result<Card> {
@@ -39,7 +58,7 @@ impl CardService {
             links,
         };
 
-        self.db.create_card(create_request).await
+        self.create_card(create_request).await // Use our own method to handle backlinks
     }
 
     pub async fn get_card(&self, id: Uuid) -> Result<Option<Card>> {
@@ -56,6 +75,13 @@ impl CardService {
             None => return Ok(None),
         };
 
+        // Get old links for backlink maintenance
+        let old_links: Vec<Uuid> = if let Some(ref links_json) = card.links {
+            serde_json::from_str(links_json).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
         if let Some(zettel_id) = request.zettel_id {
             // Validate that the new zettel_id doesn't already exist (unless it's the same card)
             if let Some(existing) = self.db.get_card_by_zettel_id(&zettel_id).await? {
@@ -70,12 +96,27 @@ impl CardService {
             card.content = content;
         }
 
+        let mut new_links = old_links.clone();
+        let mut links_changed = false;
         if let Some(links) = request.links {
-            card.links = Some(serde_json::to_string(&links)?);
+            new_links = links;
+            card.links = Some(serde_json::to_string(&new_links)?);
+            links_changed = true;
         }
 
         // Update the card in database
         self.db.update_card_content(&card).await?;
+
+        // Update backlinks if links changed, filtering out non-existent targets
+        if links_changed {
+            let mut valid_new_links = Vec::new();
+            for link_id in &new_links {
+                if self.db.get_card(*link_id).await?.is_some() {
+                    valid_new_links.push(*link_id);
+                }
+            }
+            self.db.update_backlinks(card.id, &old_links, &valid_new_links).await?;
+        }
 
         // Handle topic updates if provided
         if let Some(_topic_ids) = request.topic_ids {
@@ -184,6 +225,10 @@ impl CardService {
         } else {
             Ok(Vec::new())
         }
+    }
+
+    pub async fn get_backlinks(&self, card_id: Uuid) -> Result<Vec<Card>> {
+        self.db.get_backlinks(card_id).await
     }
 
     pub async fn resolve_zettel_ids_to_uuids(&self, zettel_ids: &[String]) -> Result<Vec<Uuid>> {

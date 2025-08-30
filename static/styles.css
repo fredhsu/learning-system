@@ -1908,6 +1908,79 @@ main {
     }
 }
 
+/* Backlinks Styles */
+.backlinks {
+    margin-top: var(--space-4);
+    padding: var(--space-4);
+    background: var(--color-background-alt);
+    border: 1px solid var(--color-border-secondary);
+    border-left: 4px solid var(--color-accent-secondary);
+    border-radius: var(--border-radius);
+}
+
+.backlinks-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+}
+
+.backlinks-header i {
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+}
+
+.backlinks-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.backlink-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-background);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--border-radius-sm);
+    text-decoration: none;
+    color: var(--color-text);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.backlink-item:hover {
+    background: var(--color-background-hover);
+    border-color: var(--color-border-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.backlink-item:active {
+    transform: translateY(0);
+}
+
+.backlink-zettel {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-accent-secondary);
+    font-family: var(--font-mono);
+}
+
+.backlink-preview {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-tight);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Responsive adjustments for linked cards */
 @media (max-width: 768px) {
     .linked-cards {
@@ -1920,6 +1993,19 @@ main {
     }
     
     .linked-card-preview {
+        font-size: var(--font-size-xs);
+    }
+    
+    .backlinks {
+        padding: var(--space-3);
+        margin-top: var(--space-3);
+    }
+    
+    .backlink-item {
+        padding: var(--space-2);
+    }
+    
+    .backlink-preview {
         font-size: var(--font-size-xs);
     }
 }

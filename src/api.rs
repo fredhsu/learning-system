@@ -174,6 +174,19 @@ pub async fn get_linked_cards(
     }
 }
 
+pub async fn get_backlinks(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApiResponse<Vec<Card>>>, StatusCode> {
+    match state.card_service.get_backlinks(id).await {
+        Ok(cards) => Ok(Json(ApiResponse::success(cards))),
+        Err(e) => {
+            eprintln!("Error getting backlinks: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 pub async fn search_cards(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
@@ -411,6 +424,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/cards/:id", delete(delete_card))
         .route("/api/cards/due", get(get_cards_due))
         .route("/api/cards/:id/links", get(get_linked_cards))
+        .route("/api/cards/:id/backlinks", get(get_backlinks))
         
         // Topic routes
         .route("/api/topics", post(create_topic))
