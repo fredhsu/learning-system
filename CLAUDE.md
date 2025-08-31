@@ -38,6 +38,18 @@ cargo run            # Run the application
 cargo check          # Fast syntax/type checking
 ```
 
+### Logging
+```bash
+# Run with different log levels
+RUST_LOG=debug cargo run                     # Debug level logging
+RUST_LOG=info,learning_system=debug cargo run  # Targeted logging
+RUST_LOG=error cargo run                     # Error level only
+
+# View logs
+tail -f logs/learning-system.log.$(date +%Y-%m-%d)  # Follow current logs
+grep "batch" logs/learning-system.log.*              # Search across all logs
+```
+
 ### Testing
 ```bash
 cargo test           # Run all tests
@@ -96,6 +108,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Efficiency**: Batch processing for 85-90% reduction in API calls per session
 - **Smart Ordering**: Multi-factor card optimization for better LLM context
 - **Performance Monitoring**: Comprehensive structured logging and error tracking
+- **Centralized Logging**: File-based logging with daily rotation in `logs/learning-system.log.YYYY-MM-DD`
 
 ### API Enhancements
 - **Search Endpoint**: `/api/cards/search?q={query}` with URL encoding support

@@ -18,7 +18,9 @@ use std::sync::{Arc, Mutex};
 use tokio::fs;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::{info, Level};
+use tracing::info;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::{
     api::{create_router, AppState},
@@ -32,25 +34,8 @@ async fn main() -> Result<()> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
     
-    // Initialize tracing with environment-configurable level
-    let log_level = env::var("RUST_LOG")
-        .unwrap_or_else(|_| "info".to_string());
-    
-    let level = match log_level.to_lowercase().as_str() {
-        "debug" => Level::DEBUG,
-        "info" => Level::INFO,
-        "warn" => Level::WARN,
-        "error" => Level::ERROR,
-        _ => Level::INFO,
-    };
-
-    tracing_subscriber::fmt()
-        .with_max_level(level)
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
-        .init();
+    // Initialize comprehensive logging with file output
+    let _guard = setup_logging()?;
 
     // Load environment variables
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:learning.db".to_string());
@@ -127,4 +112,51 @@ async fn serve_js() -> Result<(StatusCode, [(&'static str, &'static str); 1], St
         )),
         Err(_) => Err(StatusCode::NOT_FOUND),
     }
+}
+
+fn setup_logging() -> Result<WorkerGuard> {
+    use std::fs;
+    use tracing_subscriber::fmt;
+
+    // Create logs directory if it doesn't exist
+    fs::create_dir_all("logs").unwrap_or_else(|e| {
+        eprintln!("Warning: Could not create logs directory: {}", e);
+    });
+
+    // Configure log level from environment variable
+    let default_log_level = "info,learning_system=debug";
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(default_log_level));
+
+    // Set up file appender with daily rotation
+    let file_appender = tracing_appender::rolling::daily("logs", "learning-system.log");
+    let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
+
+    // Configure console output
+    let console_layer = fmt::layer()
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_ansi(true);
+
+    // Configure file output (no ANSI colors for files)
+    let file_layer = fmt::layer()
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_ansi(false)
+        .with_writer(non_blocking_file);
+
+    // Initialize subscriber with both console and file outputs
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(console_layer)
+        .with(file_layer)
+        .init();
+
+    info!("Logging initialized - writing to logs/learning-system.log with daily rotation");
+    
+    Ok(guard)
 }
