@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use chrono::Utc;
+use tracing::{debug, error, info, warn};
 
 use crate::{
     card_service::CardService,
@@ -74,7 +75,7 @@ pub async fn create_card(
     match state.card_service.create_card_with_zettel_links(request).await {
         Ok(card) => Ok(Json(ApiResponse::success(card))),
         Err(e) => {
-            eprintln!("Error creating card: {}", e);
+            error!(error = %e, "Error creating card");
             let error_msg = e.to_string();
             if error_msg.contains("already exists") {
                 Ok(Json(ApiResponse::error(error_msg)))
@@ -97,7 +98,7 @@ pub async fn get_card(
         Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
-            eprintln!("Error getting card: {}", e);
+            error!(card_id = %id, error = %e, "Error getting card");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -111,7 +112,7 @@ pub async fn get_card_by_zettel_id(
         Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
-            eprintln!("Error getting card by zettel ID: {}", e);
+            error!(zettel_id = %zettel_id, error = %e, "Error getting card by zettel ID");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -126,7 +127,7 @@ pub async fn update_card(
         Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
-            eprintln!("Error updating card: {}", e);
+            error!(card_id = %id, error = %e, "Error updating card");
             let error_msg = e.to_string();
             if error_msg.contains("not found") {
                 Ok(Json(ApiResponse::error(error_msg)))
@@ -143,7 +144,7 @@ pub async fn get_all_cards(
     match state.card_service.get_all_cards().await {
         Ok(cards) => Ok(Json(ApiResponse::success(cards))),
         Err(e) => {
-            eprintln!("Error getting all cards: {}", e);
+            error!(error = %e, "Error getting all cards");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -155,7 +156,7 @@ pub async fn get_cards_due(
     match state.card_service.get_cards_due_for_review().await {
         Ok(cards) => Ok(Json(ApiResponse::success(cards))),
         Err(e) => {
-            eprintln!("Error getting due cards: {}", e);
+            error!(error = %e, "Error getting due cards");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -168,7 +169,7 @@ pub async fn get_linked_cards(
     match state.card_service.get_linked_cards(id).await {
         Ok(cards) => Ok(Json(ApiResponse::success(cards))),
         Err(e) => {
-            eprintln!("Error getting linked cards: {}", e);
+            error!(card_id = %id, error = %e, "Error getting linked cards");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -181,7 +182,7 @@ pub async fn get_backlinks(
     match state.card_service.get_backlinks(id).await {
         Ok(cards) => Ok(Json(ApiResponse::success(cards))),
         Err(e) => {
-            eprintln!("Error getting backlinks: {}", e);
+            error!(card_id = %id, error = %e, "Error getting backlinks");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -196,7 +197,7 @@ pub async fn search_cards(
     match state.card_service.search_cards(search_query).await {
         Ok(cards) => Ok(Json(ApiResponse::success(cards))),
         Err(e) => {
-            eprintln!("Error searching cards: {}", e);
+            error!(query = ?params.q, error = %e, "Error searching cards");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -213,7 +214,7 @@ pub async fn create_topic(
     match state.card_service.create_topic(name.to_string(), description).await {
         Ok(topic) => Ok(Json(ApiResponse::success(topic))),
         Err(e) => {
-            eprintln!("Error creating topic: {}", e);
+            error!(error = %e, "Error creating topic");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -225,7 +226,7 @@ pub async fn get_topics(
     match state.card_service.get_all_topics().await {
         Ok(topics) => Ok(Json(ApiResponse::success(topics))),
         Err(e) => {
-            eprintln!("Error getting topics: {}", e);
+            error!(error = %e, "Error getting topics");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -235,11 +236,11 @@ pub async fn get_topics(
 pub async fn start_review_session(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<ReviewSession>>, StatusCode> {
-    // Get cards due for review
-    let due_cards = match state.card_service.get_cards_due_for_review().await {
+    // Get cards due for review with smart ordering
+    let due_cards = match state.card_service.get_cards_due_optimized().await {
         Ok(cards) => cards,
         Err(e) => {
-            eprintln!("Error getting due cards: {}", e);
+            error!(error = %e, "Error getting due cards");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
@@ -255,28 +256,52 @@ pub async fn start_review_session(
         return Ok(Json(ApiResponse::success(empty_session)));
     }
 
-    // Generate questions for all cards upfront
-    let mut all_questions = HashMap::new();
-    for card in &due_cards {
-        match state.llm_service.generate_quiz_questions(card).await {
-            Ok(questions) => {
-                all_questions.insert(card.id, questions);
-            }
-            Err(e) => {
-                eprintln!("Error generating quiz for card {}: {}", card.id, e);
-                // Fallback to local generation
-                match state.llm_service.generate_quiz_questions_local(card, "").await {
+    // Generate questions for all cards using batch processing
+    let all_questions = match state.llm_service.generate_batch_quiz_questions(&due_cards).await {
+        Ok(questions) => {
+            info!(
+                card_count = due_cards.len(),
+                generated_count = questions.len(),
+                "Successfully generated questions using batch processing"
+            );
+            questions
+        }
+        Err(e) => {
+            warn!(
+                card_count = due_cards.len(),
+                error = %e,
+                "Batch question generation failed, falling back to individual generation"
+            );
+            // Fallback to individual generation (the method handles its own fallbacks)
+            let mut individual_questions = HashMap::new();
+            for card in &due_cards {
+                match state.llm_service.generate_quiz_questions(card).await {
                     Ok(questions) => {
-                        all_questions.insert(card.id, questions);
+                        individual_questions.insert(card.id, questions);
                     }
-                    Err(_) => {
-                        // Skip this card if we can't generate questions
-                        continue;
+                    Err(card_e) => {
+                        error!(card_id = %card.id, error = %card_e, "Error generating quiz for individual card");
+                        // Use local generation as final fallback
+                        match state.llm_service.generate_quiz_questions_local(card, "").await {
+                            Ok(questions) => {
+                                individual_questions.insert(card.id, questions);
+                            }
+                            Err(local_e) => {
+                                error!(
+                                    card_id = %card.id,
+                                    error = %local_e,
+                                    "All question generation methods failed for card"
+                                );
+                                // Skip this card if we can't generate questions
+                                continue;
+                            }
+                        }
                     }
                 }
             }
+            individual_questions
         }
-    }
+    };
 
     let session = ReviewSession {
         session_id: Uuid::new_v4(),
@@ -311,23 +336,53 @@ pub async fn generate_quiz(
     State(state): State<AppState>,
     Path(card_id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<Vec<QuizQuestion>>>, StatusCode> {
+    info!(card_id = %card_id, "Generating quiz for card");
+    
     let card = match state.card_service.get_card(card_id).await {
-        Ok(Some(card)) => card,
-        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Ok(Some(card)) => {
+            debug!(card_id = %card_id, zettel_id = %card.zettel_id, "Retrieved card for quiz generation");
+            card
+        },
+        Ok(None) => {
+            warn!(card_id = %card_id, "Card not found for quiz generation");
+            return Err(StatusCode::NOT_FOUND);
+        },
         Err(e) => {
-            eprintln!("Error getting card for quiz: {}", e);
+            error!(card_id = %card_id, error = %e, "Error getting card for quiz");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
     match state.llm_service.generate_quiz_questions(&card).await {
-        Ok(questions) => Ok(Json(ApiResponse::success(questions))),
+        Ok(questions) => {
+            info!(
+                card_id = %card_id,
+                question_count = questions.len(),
+                "Successfully generated quiz questions"
+            );
+            Ok(Json(ApiResponse::success(questions)))
+        },
         Err(e) => {
-            eprintln!("Error generating quiz: {}", e);
+            warn!(card_id = %card_id, error = %e, "Primary quiz generation failed, attempting local fallback");
             // Fallback to local generation if LLM fails
             match state.llm_service.generate_quiz_questions_local(&card, "").await {
-                Ok(questions) => Ok(Json(ApiResponse::success(questions))),
-                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                Ok(questions) => {
+                    info!(
+                        card_id = %card_id,
+                        question_count = questions.len(),
+                        "Successfully generated quiz questions using local fallback"
+                    );
+                    Ok(Json(ApiResponse::success(questions)))
+                },
+                Err(fallback_error) => {
+                    error!(
+                        card_id = %card_id,
+                        primary_error = %e,
+                        fallback_error = %fallback_error,
+                        "Both primary and fallback quiz generation failed"
+                    );
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
             }
         }
     }
@@ -340,11 +395,23 @@ pub async fn submit_quiz_answer(
     Path(card_id): Path<Uuid>,
     Json(request): Json<QuizAnswerRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    info!(
+        card_id = %card_id,
+        user_answer = %request.answer,
+        "Submitting quiz answer for legacy endpoint"
+    );
+    
     let card = match state.card_service.get_card(card_id).await {
-        Ok(Some(card)) => card,
-        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Ok(Some(card)) => {
+            debug!(card_id = %card_id, zettel_id = %card.zettel_id, "Retrieved card for answer grading");
+            card
+        },
+        Ok(None) => {
+            warn!(card_id = %card_id, "Card not found for quiz answer");
+            return Err(StatusCode::NOT_FOUND);
+        },
         Err(e) => {
-            eprintln!("Error getting card for quiz answer: {}", e);
+            error!(card_id = %card_id, error = %e, "Error getting card for quiz answer");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
@@ -357,21 +424,43 @@ pub async fn submit_quiz_answer(
         correct_answer: Some("Based on the card content".to_string()),
     };
 
+    debug!(card_id = %card_id, "Using dummy question for legacy quiz answer endpoint");
+
     match state.llm_service.grade_answer(&card, &dummy_question, &request.answer).await {
         Ok(grading_result) => {
+            info!(
+                card_id = %card_id,
+                is_correct = grading_result.is_correct,
+                suggested_rating = grading_result.suggested_rating,
+                "Answer graded successfully, updating card review"
+            );
+            
             // Update card with FSRS based on the suggested rating
-            if let Ok(Some(updated_card)) = state.card_service.review_card(card_id, grading_result.suggested_rating).await {
-                let response = json!({
-                    "grading": grading_result,
-                    "updated_card": updated_card
-                });
-                Ok(Json(ApiResponse::success(response)))
-            } else {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            match state.card_service.review_card(card_id, grading_result.suggested_rating).await {
+                Ok(Some(updated_card)) => {
+                    info!(
+                        card_id = %card_id,
+                        new_next_review = %updated_card.next_review.to_string(),
+                        "Card review updated successfully"
+                    );
+                    let response = json!({
+                        "grading": grading_result,
+                        "updated_card": updated_card
+                    });
+                    Ok(Json(ApiResponse::success(response)))
+                }
+                Ok(None) => {
+                    error!(card_id = %card_id, "Card not found when updating review");
+                    Err(StatusCode::NOT_FOUND)
+                }
+                Err(e) => {
+                    error!(card_id = %card_id, error = %e, "Error updating card review");
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
             }
         }
         Err(e) => {
-            eprintln!("Error grading answer: {}", e);
+            error!(card_id = %card_id, error = %e, "Error grading answer");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -387,7 +476,7 @@ pub async fn review_card(
         Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
-            eprintln!("Error reviewing card: {}", e);
+            error!(card_id = %card_id, rating = request.rating, error = %e, "Error reviewing card");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -406,7 +495,7 @@ pub async fn delete_card(
             }
         }
         Err(e) => {
-            eprintln!("Error deleting card: {}", e);
+            error!(card_id = %id, error = %e, "Error deleting card");
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }

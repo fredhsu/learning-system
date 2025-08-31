@@ -32,9 +32,24 @@ async fn main() -> Result<()> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
     
-    // Initialize tracing
+    // Initialize tracing with environment-configurable level
+    let log_level = env::var("RUST_LOG")
+        .unwrap_or_else(|_| "info".to_string());
+    
+    let level = match log_level.to_lowercase().as_str() {
+        "debug" => Level::DEBUG,
+        "info" => Level::INFO,
+        "warn" => Level::WARN,
+        "error" => Level::ERROR,
+        _ => Level::INFO,
+    };
+
     tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
+        .with_max_level(level)
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
         .init();
 
     // Load environment variables

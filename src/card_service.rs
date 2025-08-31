@@ -1,5 +1,6 @@
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::database::Database;
@@ -106,17 +107,30 @@ impl CardService {
                             .collect();
                         
                         if !referencing_others.is_empty() {
-                            eprintln!(
-                                "Warning: Zettel ID changed from '{}' to '{}' for card {}. Found {} other cards that may reference the old ID in their content.",
-                                old_zettel_id, new_zettel_id, card.id, referencing_others.len()
+                            warn!(
+                                card_id = %card.id,
+                                old_zettel_id = %old_zettel_id,
+                                new_zettel_id = %new_zettel_id,
+                                reference_count = referencing_others.len(),
+                                "Zettel ID changed - other cards may reference the old ID in their content"
                             );
                             for ref_card in referencing_others {
-                                eprintln!("  - Card '{}' ({})", ref_card.zettel_id, ref_card.id);
+                                warn!(
+                                    card_id = %card.id,
+                                    referencing_card_id = %ref_card.id,
+                                    referencing_zettel_id = %ref_card.zettel_id,
+                                    "Card may contain textual reference to old Zettel ID"
+                                );
                             }
                         }
                     }
                     Err(e) => {
-                        eprintln!("Warning: Could not check for textual references to old Zettel ID '{}': {}", old_zettel_id, e);
+                        error!(
+                            card_id = %card.id,
+                            old_zettel_id = %old_zettel_id,
+                            error = %e,
+                            "Could not check for textual references to old Zettel ID"
+                        );
                     }
                 }
             }
@@ -194,6 +208,65 @@ impl CardService {
     // Review operations
     pub async fn get_cards_due_for_review(&self) -> Result<Vec<Card>> {
         self.db.get_cards_due_for_review().await
+    }
+
+    pub async fn get_cards_due_optimized(&self) -> Result<Vec<Card>> {
+        let mut cards = self.get_cards_due_for_review().await?;
+        
+        if cards.len() <= 1 {
+            return Ok(cards);
+        }
+
+        info!(
+            card_count = cards.len(),
+            "Applying smart ordering to due cards for optimal batch processing"
+        );
+
+        // Smart ordering strategy:
+        // 1. Group by content similarity/length for better LLM context
+        // 2. Prioritize cards that are significantly overdue
+        // 3. Group cards with similar difficulty levels
+        
+        cards.sort_by(|a, b| {
+            // First, prioritize significantly overdue cards (more than 2x their original interval)
+            let now = chrono::Utc::now();
+            let a_overdue_ratio = calculate_overdue_ratio(a, now);
+            let b_overdue_ratio = calculate_overdue_ratio(b, now);
+            
+            // If one card is significantly more overdue, prioritize it
+            if (a_overdue_ratio - b_overdue_ratio).abs() > 1.5 {
+                return b_overdue_ratio.partial_cmp(&a_overdue_ratio).unwrap_or(std::cmp::Ordering::Equal);
+            }
+            
+            // Group by content length for better LLM batching
+            // Similar length content tends to have better batch generation results
+            let a_length_bucket = get_content_length_bucket(a.content.len());
+            let b_length_bucket = get_content_length_bucket(b.content.len());
+            
+            if a_length_bucket != b_length_bucket {
+                return a_length_bucket.cmp(&b_length_bucket);
+            }
+            
+            // Within same length bucket, group by difficulty for more consistent question generation
+            let a_difficulty_bucket = get_difficulty_bucket(a.difficulty);
+            let b_difficulty_bucket = get_difficulty_bucket(b.difficulty);
+            
+            if a_difficulty_bucket != b_difficulty_bucket {
+                return a_difficulty_bucket.cmp(&b_difficulty_bucket);
+            }
+            
+            // Finally, sort by next_review (oldest first)
+            a.next_review.cmp(&b.next_review)
+        });
+
+        debug!(
+            card_count = cards.len(),
+            first_card_length = cards.first().map(|c| c.content.len()).unwrap_or(0),
+            last_card_length = cards.last().map(|c| c.content.len()).unwrap_or(0),
+            "Applied smart ordering to due cards"
+        );
+
+        Ok(cards)
     }
 
     pub async fn review_card(&self, card_id: Uuid, rating: i32) -> Result<Option<Card>> {
@@ -546,5 +619,45 @@ mod tests {
         // Test getting linked cards for nonexistent card
         let linked = service.get_linked_cards(fake_id).await.unwrap();
         assert_eq!(linked.len(), 0);
+    }
+}
+
+// Helper functions for smart card ordering
+
+pub fn calculate_overdue_ratio(card: &Card, now: DateTime<Utc>) -> f64 {
+    if card.next_review <= now {
+        let overdue_duration = now.signed_duration_since(card.next_review).num_hours() as f64;
+        let total_interval = if let Some(last_reviewed) = card.last_reviewed {
+            card.next_review.signed_duration_since(last_reviewed).num_hours() as f64
+        } else {
+            24.0 // Default to 1 day for new cards
+        };
+        
+        if total_interval > 0.0 {
+            overdue_duration / total_interval
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    }
+}
+
+pub fn get_content_length_bucket(length: usize) -> u8 {
+    match length {
+        0..=100 => 0,      // Very short
+        101..=300 => 1,    // Short
+        301..=600 => 2,    // Medium
+        601..=1200 => 3,   // Long
+        _ => 4,            // Very long
+    }
+}
+
+pub fn get_difficulty_bucket(difficulty: f64) -> u8 {
+    match difficulty {
+        d if d < 2.0 => 0,      // Easy
+        d if d < 4.0 => 1,      // Medium
+        d if d < 6.0 => 2,      // Hard
+        _ => 3,                 // Very hard
     }
 }

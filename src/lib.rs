@@ -1,6 +1,7 @@
 pub mod api;
 pub mod card_service;
 pub mod database;
+mod efficiency_tests;
 pub mod fsrs_scheduler;
 pub mod llm_service;
 pub mod models;

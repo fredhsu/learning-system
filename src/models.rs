@@ -108,3 +108,23 @@ pub struct QuizAnswerWithContext {
     pub question_index: usize,
     pub answer: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchGradingRequest {
+    pub question: QuizQuestion,
+    pub user_answer: String,
+    pub card_content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchGradingResponse {
+    pub results: Vec<BatchGradingResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchGradingResult {
+    pub question_id: String,
+    pub is_correct: bool,
+    pub feedback: String,
+    pub suggested_rating: i32,
+}
