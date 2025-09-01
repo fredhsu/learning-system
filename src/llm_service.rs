@@ -550,6 +550,7 @@ Guidelines:
         }])
     }
 
+    #[allow(dead_code)]
     pub async fn grade_batch_answers(&self, grading_requests: &[BatchGradingRequest]) -> Result<Vec<BatchGradingResult>> {
         if grading_requests.is_empty() {
             return Ok(Vec::new());
@@ -706,6 +707,7 @@ Focus on conceptual understanding rather than exact text matching."#,
         }
     }
 
+    #[allow(dead_code)]
     async fn fallback_to_individual_grading(&self, grading_requests: &[BatchGradingRequest]) -> Result<Vec<BatchGradingResult>> {
         info!(
             request_count = grading_requests.len(),

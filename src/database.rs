@@ -433,6 +433,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn remove_all_backlinks_from_source(&self, source_card_id: Uuid) -> Result<()> {
         sqlx::query(
             "DELETE FROM backlinks WHERE source_card_id = ?1"
@@ -473,6 +474,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn get_cards_linking_to(&self, target_card_id: Uuid) -> Result<Vec<Card>> {
         let rows = sqlx::query(
             "SELECT * FROM cards WHERE links IS NOT NULL AND links != '[]'"

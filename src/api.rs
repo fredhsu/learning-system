@@ -331,70 +331,149 @@ pub async fn get_review_session(
     }
 }
 
-// Quiz endpoints
-pub async fn generate_quiz(
+pub async fn submit_session_answer(
     State(state): State<AppState>,
-    Path(card_id): Path<Uuid>,
-) -> Result<Json<ApiResponse<Vec<QuizQuestion>>>, StatusCode> {
-    info!(card_id = %card_id, "Generating quiz for card");
-    
+    Path((session_id, card_id)): Path<(Uuid, Uuid)>,
+    Json(request): Json<QuizAnswerWithContext>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    info!(
+        session_id = %session_id,
+        card_id = %card_id,
+        question_index = request.question_index,
+        user_answer = %request.answer,
+        "Submitting answer for session-based quiz"
+    );
+
+    // Get the session and validate it exists
+    let session = {
+        let sessions = state.review_sessions.lock().unwrap();
+        match sessions.get(&session_id) {
+            Some(session) => session.clone(),
+            None => {
+                warn!(session_id = %session_id, "Session not found for answer submission");
+                return Err(StatusCode::NOT_FOUND);
+            }
+        }
+    };
+
+    // Get the card
     let card = match state.card_service.get_card(card_id).await {
         Ok(Some(card)) => {
-            debug!(card_id = %card_id, zettel_id = %card.zettel_id, "Retrieved card for quiz generation");
+            debug!(card_id = %card_id, zettel_id = %card.zettel_id, "Retrieved card for session answer grading");
             card
         },
         Ok(None) => {
-            warn!(card_id = %card_id, "Card not found for quiz generation");
+            warn!(card_id = %card_id, "Card not found for session quiz answer");
             return Err(StatusCode::NOT_FOUND);
         },
         Err(e) => {
-            error!(card_id = %card_id, error = %e, "Error getting card for quiz");
+            error!(card_id = %card_id, error = %e, "Error getting card for session quiz answer");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
-    match state.llm_service.generate_quiz_questions(&card).await {
-        Ok(questions) => {
+    // Get the questions for this card from the session
+    let questions = match session.questions.get(&card_id) {
+        Some(questions) => questions,
+        None => {
+            warn!(session_id = %session_id, card_id = %card_id, "No questions found for card in session");
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
+    // Validate question index
+    if request.question_index >= questions.len() {
+        warn!(
+            session_id = %session_id,
+            card_id = %card_id,
+            question_index = request.question_index,
+            questions_count = questions.len(),
+            "Invalid question index for session"
+        );
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let question = &questions[request.question_index];
+    debug!(
+        session_id = %session_id,
+        card_id = %card_id,
+        question_index = request.question_index,
+        question_type = %question.question_type,
+        "Retrieved question from session for grading"
+    );
+
+    // Grade the answer using the actual question context
+    match state.llm_service.grade_answer(&card, question, &request.answer).await {
+        Ok(grading_result) => {
             info!(
+                session_id = %session_id,
                 card_id = %card_id,
-                question_count = questions.len(),
-                "Successfully generated quiz questions"
+                question_index = request.question_index,
+                is_correct = grading_result.is_correct,
+                suggested_rating = grading_result.suggested_rating,
+                "Session answer graded successfully, updating card review"
             );
-            Ok(Json(ApiResponse::success(questions)))
-        },
-        Err(e) => {
-            warn!(card_id = %card_id, error = %e, "Primary quiz generation failed, attempting local fallback");
-            // Fallback to local generation if LLM fails
-            match state.llm_service.generate_quiz_questions_local(&card, "").await {
-                Ok(questions) => {
+            
+            // Update card with FSRS based on the suggested rating
+            match state.card_service.review_card(card_id, grading_result.suggested_rating).await {
+                Ok(Some(updated_card)) => {
                     info!(
+                        session_id = %session_id,
                         card_id = %card_id,
-                        question_count = questions.len(),
-                        "Successfully generated quiz questions using local fallback"
+                        new_next_review = %updated_card.next_review.to_string(),
+                        "Card review updated successfully after session quiz"
                     );
-                    Ok(Json(ApiResponse::success(questions)))
+                    
+                    Ok(Json(ApiResponse::success(json!({
+                        "is_correct": grading_result.is_correct,
+                        "feedback": grading_result.feedback,
+                        "rating": grading_result.suggested_rating,
+                        "next_review": updated_card.next_review
+                    }))))
                 },
-                Err(fallback_error) => {
+                Ok(None) => {
+                    warn!(card_id = %card_id, "Card not found when updating review after session quiz");
+                    Err(StatusCode::NOT_FOUND)
+                },
+                Err(e) => {
                     error!(
                         card_id = %card_id,
-                        primary_error = %e,
-                        fallback_error = %fallback_error,
-                        "Both primary and fallback quiz generation failed"
+                        rating = grading_result.suggested_rating,
+                        error = %e,
+                        "Error updating card review after session quiz"
                     );
                     Err(StatusCode::INTERNAL_SERVER_ERROR)
                 }
             }
+        },
+        Err(e) => {
+            error!(
+                session_id = %session_id,
+                card_id = %card_id,
+                question_index = request.question_index,
+                error = %e,
+                "Error grading session quiz answer"
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }
 
+// Quiz endpoints (legacy)
 
-// Legacy endpoint - kept for backward compatibility
+
+// DEPRECATED: Use session-based answer submission instead (/api/review/session/:session_id/answer/:card_id)
+// This legacy endpoint loses question context and causes multiple choice grading issues
 pub async fn submit_quiz_answer(
     State(state): State<AppState>,
     Path(card_id): Path<Uuid>,
     Json(request): Json<QuizAnswerRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    warn!(
+        card_id = %card_id,
+        user_answer = %request.answer,
+        "DEPRECATED: Using legacy quiz answer endpoint - multiple choice answers may be graded incorrectly. Use session-based submission instead."
+    );
     info!(
         card_id = %card_id,
         user_answer = %request.answer,
@@ -519,13 +598,13 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/topics", post(create_topic))
         .route("/api/topics", get(get_topics))
         
-        // Quiz routes
-        .route("/api/cards/:id/quiz", get(generate_quiz))
+        // Quiz routes (legacy - deprecated)
         .route("/api/cards/:id/quiz/answer", post(submit_quiz_answer))
         
         // Review session routes
         .route("/api/review/session/start", post(start_review_session))
         .route("/api/review/session/:id", get(get_review_session))
+        .route("/api/review/session/:session_id/answer/:card_id", post(submit_session_answer))
         
         // Review routes
         .route("/api/cards/:id/review", post(review_card))

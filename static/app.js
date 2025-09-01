@@ -828,17 +828,17 @@ class LearningSystem {
         submitButton.textContent = 'Submitting...';
 
         try {
-            // For now, use the existing endpoint since the new one has compilation issues
-            // The main benefit is still achieved - pre-generated questions
-            const dummyQuestion = this.currentQuiz.questions[currentQuestion];
-            const result = await this.apiCall(`/cards/${card.id}/quiz/answer`, {
+            // Use the new session-based endpoint for context-aware grading
+            const question = this.currentQuiz.questions[currentQuestion];
+            const result = await this.apiCall(`/review/session/${this.reviewSession.sessionId}/answer/${card.id}`, {
                 method: 'POST',
                 body: JSON.stringify({
+                    question_index: currentQuestion,
                     answer: answer
                 })
             });
 
-            this.showFeedback(result.grading, dummyQuestion);
+            this.showFeedback(result.data, question);
         } catch (error) {
             this.showError('Failed to submit answer');
             // Re-enable button on error
