@@ -101,6 +101,7 @@ pub struct LLMService {
 }
 
 impl LLMService {
+    #[allow(dead_code)]
     pub fn new(api_key: String, base_url: Option<String>) -> Self {
         Self::new_with_provider(api_key, base_url, LLMProvider::OpenAI, None)
     }
@@ -131,6 +132,7 @@ impl LLMService {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_gemini(api_key: String, model: Option<String>) -> Self {
         Self::new_with_provider(
             api_key, 
@@ -140,6 +142,7 @@ impl LLMService {
         )
     }
 
+    #[allow(dead_code)]
     async fn make_llm_request(&self, prompt: &str) -> Result<String> {
         self.make_llm_request_with_system(None, prompt).await
     }
@@ -151,6 +154,7 @@ impl LLMService {
         }
     }
 
+    #[allow(dead_code)]
     async fn make_openai_request(&self, prompt: &str) -> Result<String> {
         self.make_openai_request_with_system(None, prompt).await
     }
@@ -199,6 +203,7 @@ impl LLMService {
         Ok(llm_response.choices[0].message.content.clone())
     }
 
+    #[allow(dead_code)]
     async fn make_gemini_request(&self, prompt: &str) -> Result<String> {
         self.make_gemini_request_with_system(None, prompt).await
     }
@@ -278,14 +283,15 @@ impl LLMService {
                     {{
                         "question": "Question text here",
                         "question_type": "multiple_choice|short_answer|problem_solving",
-                        "options": ["A", "B", "C", "D"] or null,
+                        "options": ["Option text 1", "Option text 2", "Option text 3", "Option text 4"] or null,
                         "correct_answer": "Correct answer or option letter"
                     }}
                 ]
             }}
 
             Guidelines:
-            - For multiple_choice, provide 4 options and indicate the correct option letter
+            - For multiple_choice, provide 4 option texts WITHOUT any letter prefixes (A., B., etc.) - just the option content
+            - The frontend will automatically add A., B., C., D. prefixes when displaying
             - For short_answer, provide the expected answer
             - For problem_solving, provide the solution approach
             - Make questions challenging but fair
@@ -374,7 +380,7 @@ Please respond with a JSON object in this exact format:
             {{
                 "question": "Question text here",
                 "question_type": "multiple_choice|short_answer|problem_solving",
-                "options": ["A", "B", "C", "D"] or null,
+                "options": ["Option text 1", "Option text 2", "Option text 3", "Option text 4"] or null,
                 "correct_answer": "Correct answer or option letter"
             }}
         ],
@@ -382,7 +388,7 @@ Please respond with a JSON object in this exact format:
             {{
                 "question": "Question text here",
                 "question_type": "multiple_choice|short_answer|problem_solving", 
-                "options": ["A", "B", "C", "D"] or null,
+                "options": ["Option text 1", "Option text 2", "Option text 3", "Option text 4"] or null,
                 "correct_answer": "Correct answer or option letter"
             }}
         ]
@@ -390,7 +396,8 @@ Please respond with a JSON object in this exact format:
 }}
 
 Guidelines:
-- For multiple_choice, provide 4 options and indicate the correct option letter
+- For multiple_choice, provide 4 option texts WITHOUT any letter prefixes (A., B., etc.) - just the option content
+- The frontend will automatically add A., B., C., D. prefixes when displaying
 - For short_answer, provide the expected answer
 - For problem_solving, provide the solution approach
 - Make questions challenging but fair
@@ -747,6 +754,7 @@ Focus on conceptual understanding rather than exact text matching."#,
             let temp_card = Card {
                 id: Uuid::new_v4(),
                 zettel_id: format!("temp-{}", i),
+                title: None,
                 content: req.card_content.clone(),
                 creation_date: chrono::Utc::now(),
                 last_reviewed: None,
