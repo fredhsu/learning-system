@@ -838,7 +838,7 @@ class LearningSystem {
                 })
             });
 
-            this.showFeedback(result.data, question);
+            this.showFeedback(result, question);
         } catch (error) {
             this.showError('Failed to submit answer');
             // Re-enable button on error
