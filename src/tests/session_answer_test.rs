@@ -17,13 +17,13 @@ mod tests {
             "answer": "B"
         });
         
-        // 3. Expected response format
+        // 3. Expected response format (includes suggested rating as "rating")
         let expected_response = json!({
             "success": true,
             "data": {
                 "is_correct": true,
                 "feedback": "Correct! Option B is the right answer...",
-                "rating": 3,
+                "rating": 3,  // This is the suggested_rating from the grading result
                 "next_review": "2025-09-02T12:00:00Z"
             },
             "error": null
@@ -34,6 +34,7 @@ mod tests {
         // - Question index is used to retrieve the correct question from session storage
         // - The actual question context is passed to the grading service
         // - Multiple choice answers like "B" are correctly graded against the proper question
+        // - The response includes the suggested rating from the LLM grading service
         
         println!("Session answer endpoint test structure:");
         println!("POST /api/review/session/{}/answer/{}", session_id, card_id);

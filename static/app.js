@@ -874,17 +874,24 @@ class LearningSystem {
             }
         }
         
+        // Create rating name helper function
+        const getRatingName = (rating) => {
+            const ratingNames = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
+            return ratingNames[rating] || 'Unknown';
+        };
+        
         feedbackContainer.innerHTML = `
             <div class="feedback ${grading.is_correct ? 'correct' : 'incorrect'} feedback-transition">
                 <h4>${grading.is_correct ? 'Correct!' : 'Incorrect'}</h4>
                 <p>${grading.feedback}</p>
                 ${question.correct_answer ? `<p><strong>Correct answer:</strong> ${question.correct_answer}</p>` : ''}
+                ${grading.rating ? `<p class="suggested-rating"><strong>Suggested rating:</strong> ${getRatingName(grading.rating)} (${grading.rating})</p>` : ''}
             </div>
             <div class="rating-buttons">
-                <button class="rating-btn again rating-btn-with-shortcut" data-shortcut="1" onclick="app.rateCard(1)">Again</button>
-                <button class="rating-btn hard rating-btn-with-shortcut" data-shortcut="2" onclick="app.rateCard(2)">Hard</button>
-                <button class="rating-btn good rating-btn-with-shortcut" data-shortcut="3" onclick="app.rateCard(3)">Good</button>
-                <button class="rating-btn easy rating-btn-with-shortcut" data-shortcut="4" onclick="app.rateCard(4)">Easy</button>
+                <button class="rating-btn again rating-btn-with-shortcut ${grading.rating === 1 ? 'suggested' : ''}" data-shortcut="1" onclick="app.rateCard(1)">Again</button>
+                <button class="rating-btn hard rating-btn-with-shortcut ${grading.rating === 2 ? 'suggested' : ''}" data-shortcut="2" onclick="app.rateCard(2)">Hard</button>
+                <button class="rating-btn good rating-btn-with-shortcut ${grading.rating === 3 ? 'suggested' : ''}" data-shortcut="3" onclick="app.rateCard(3)">Good</button>
+                <button class="rating-btn easy rating-btn-with-shortcut ${grading.rating === 4 ? 'suggested' : ''}" data-shortcut="4" onclick="app.rateCard(4)">Easy</button>
             </div>
         `;
     }

@@ -73,7 +73,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 
 ### LLM Integration Points
 - **Batch Quiz Generation**: Multiple cards processed in single API calls for efficiency
-- **Session-Based Answer Grading**: Context-aware grading using actual questions from session storage
+- **Session-Based Answer Grading**: Context-aware grading using actual questions from session storage with suggested rating display
 - **Semantic Answer Grading**: Advanced grading with comprehensive understanding prompts
 - **Smart Card Ordering**: Content similarity and difficulty-based optimization for better LLM context
 - **Structured Logging**: Comprehensive performance monitoring and debugging capabilities
@@ -102,7 +102,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Cards**: Preview system for long content with expand/collapse functionality
 - **Linking**: Bidirectional backlinks with automatic maintenance and distinct visual styling
 - **Math Rendering**: Full LaTeX support with inline `$...$` and display `$$...$$` math
-- **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), and completion celebrations
+- **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), completion celebrations, and suggested rating display
 - **Responsive**: Mobile-first design with touch-friendly interactions
 - **Feedback**: Toast notifications, skeleton loading, and enhanced error handling
 - **Accessibility**: High contrast mode, reduced motion, semantic HTML
@@ -110,7 +110,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Smart Ordering**: Multi-factor card optimization for better LLM context
 - **Performance Monitoring**: Comprehensive structured logging and error tracking
 - **Centralized Logging**: File-based logging with daily rotation in `logs/learning-system.log.YYYY-MM-DD`
-- **Session Answer Submission**: Context-aware grading for multiple choice questions with proper question context
+- **Session Answer Submission**: Context-aware grading for multiple choice questions with proper question context and suggested rating display
 
 ### API Enhancements
 - **Search Endpoint**: `/api/cards/search?q={query}` with URL encoding support
@@ -130,7 +130,8 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Error Handling**: Edge cases, concurrent operations, invalid data handling, non-existent link targets
 - **Efficiency Tests**: Batch processing, smart ordering algorithms, fallback mechanisms
 - **Performance Tests**: API call reduction, content bucketing, overdue ratio calculations
-- **Session Answer Tests**: Context-aware answer submission and multiple choice grading validation
+- **Session Answer Tests**: Context-aware answer submission and multiple choice grading validation with suggested rating display
+- **Suggested Rating Tests**: UI response format validation for suggested rating display functionality
 
 ### Development Notes
 - All Phase 2 UI/UX improvements from UI_IMPROVEMENTS.md completed
@@ -144,14 +145,14 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - Legacy endpoint cleanup removes unused and problematic API routes
 - Design system provides consistent foundation for future development
 - Mobile-first responsive approach supports modern device usage patterns
-- 113 total tests covering all functionality including session answer submission
+- 114 total tests covering all functionality including session answer submission and suggested rating display
 
 ### Performance Achievements
 - **API Call Reduction**: 85-90% fewer calls per review session (from ~15-20 to 1-2 calls)
 - **Session Initialization**: Instant question access through batch pre-generation
 - **Smart Ordering**: Optimized card sequence for better LLM context utilization
-- **Context-Aware Grading**: Multiple choice questions graded against actual question context
+- **Context-Aware Grading**: Multiple choice questions graded against actual question context with AI-powered suggested ratings
 - **Monitoring**: Comprehensive structured logging for performance visibility
 
-**Latest Update**: Legacy endpoint cleanup completed - frontend migrated to session-based answer submission, unused endpoints removed
+**Latest Update**: Suggested rating display feature implemented - users now see AI-recommended difficulty ratings alongside answer feedback with visual button highlighting
 **Next Phase**: Ready for Phase 4 advanced features (session persistence, dark mode, advanced study statistics)

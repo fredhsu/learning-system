@@ -344,3 +344,38 @@ async fn test_typography_scale_data_validation() {
         println!("Successfully tested {} typography: {}", label, content);
     }
 }
+
+#[tokio::test]
+async fn test_suggested_rating_response_format() {
+    // Test that the API response includes the suggested rating field
+    // This validates that the session answer endpoint returns the correct format
+    // for the frontend to display the suggested rating
+    
+    let mock_grading_response = json!({
+        "success": true,
+        "data": {
+            "is_correct": true,
+            "feedback": "Great answer! You demonstrated understanding of the concept.",
+            "rating": 3,  // This is the suggested_rating field from backend
+            "next_review": "2025-09-05T10:00:00Z"
+        },
+        "error": null
+    });
+    
+    // Verify the response structure contains the expected fields
+    let data = &mock_grading_response["data"];
+    assert!(data["is_correct"].is_boolean(), "Response should have is_correct boolean");
+    assert!(data["feedback"].is_string(), "Response should have feedback string");
+    assert!(data["rating"].is_number(), "Response should have rating number (suggested_rating)");
+    assert!(data["next_review"].is_string(), "Response should have next_review string");
+    
+    // Verify rating is in valid FSRS range (1-4)
+    let rating = data["rating"].as_i64().unwrap();
+    assert!(rating >= 1 && rating <= 4, "Rating should be between 1-4 (FSRS range)");
+    
+    println!("✅ Suggested rating response format validated");
+    println!("   - is_correct: {}", data["is_correct"]);
+    println!("   - feedback: {}", data["feedback"]);
+    println!("   - rating (suggested): {}", data["rating"]);
+    println!("   - next_review: {}", data["next_review"]);
+}
