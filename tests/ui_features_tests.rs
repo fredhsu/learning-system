@@ -1,6 +1,6 @@
 use axum_test::TestServer;
 use serde_json::{json, Value};
-use learning_system::{api::*, CardService, Database, LLMService};
+use learning_system::{api::*, CardService, Database, LLMService, LLMProvider};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -8,6 +8,25 @@ async fn create_test_server() -> TestServer {
     let db = Database::new("sqlite::memory:").await.unwrap();
     let card_service = CardService::new(db);
     let llm_service = LLMService::new("test_key".to_string(), None);
+    let app_state = AppState {
+        card_service,
+        llm_service,
+        review_sessions: Arc::new(Mutex::new(HashMap::new())),
+    };
+    
+    let app = create_router(app_state);
+    TestServer::new(app).unwrap()
+}
+
+async fn create_test_server_with_provider(provider: LLMProvider) -> TestServer {
+    let db = Database::new("sqlite::memory:").await.unwrap();
+    let card_service = CardService::new(db);
+    let llm_service = LLMService::new_with_provider(
+        "test_key".to_string(), 
+        None, 
+        provider, 
+        None
+    );
     let app_state = AppState {
         card_service,
         llm_service,
@@ -378,4 +397,101 @@ async fn test_suggested_rating_response_format() {
     println!("   - feedback: {}", data["feedback"]);
     println!("   - rating (suggested): {}", data["rating"]);
     println!("   - next_review: {}", data["next_review"]);
+}
+
+#[tokio::test]
+async fn test_server_creation_with_multiple_providers() {
+    // Test that the server can be created with different LLM providers
+    
+    let providers = vec![
+        ("OpenAI", LLMProvider::OpenAI),
+        ("Gemini", LLMProvider::Gemini),
+    ];
+    
+    for (name, provider) in providers {
+        let server = create_test_server_with_provider(provider).await;
+        
+        // Test basic server functionality with each provider
+        let response = server
+            .get("/api/cards")
+            .await;
+        response.assert_status_ok();
+        
+        let cards_response: Value = response.json();
+        assert!(cards_response["success"].as_bool().unwrap_or(false), "Cards API should work with {}", name);
+        
+        println!("✅ Server created successfully with {} provider", name);
+    }
+}
+
+#[tokio::test]
+async fn test_provider_specific_card_operations() {
+    // Test that both providers support the same card operations
+    
+    let providers = vec![
+        LLMProvider::OpenAI,
+        LLMProvider::Gemini,
+    ];
+    
+    for provider in providers {
+        let server = create_test_server_with_provider(provider).await;
+        
+        // Test card creation with both providers
+        let create_request = json!({
+            "zettel_id": format!("TEST-{:?}-001", provider),
+            "content": format!("Test content for {:?} provider integration", provider),
+            "topic_ids": [],
+            "links": null
+        });
+        
+        let create_response = server
+            .post("/api/cards")
+            .json(&create_request)
+            .await;
+        create_response.assert_status_ok();
+        
+        let create_body: Value = create_response.json();
+        assert!(create_body["success"].as_bool().unwrap_or(false));
+        assert_eq!(create_body["data"]["zettel_id"], create_request["zettel_id"]);
+        
+        println!("✅ Card operations work with {:?} provider", provider);
+    }
+}
+
+#[tokio::test] 
+async fn test_api_consistency_across_providers() {
+    // Test that all API endpoints return consistent response structures
+    // regardless of which LLM provider is used
+    
+    let providers = vec![
+        LLMProvider::OpenAI,
+        LLMProvider::Gemini,
+    ];
+    
+    for provider in providers {
+        let server = create_test_server_with_provider(provider).await;
+        
+        // Test various API endpoints for consistent response structure
+        let endpoints_to_test = vec![
+            ("/api/cards", "GET"),
+            ("/api/topics", "GET"),
+        ];
+        
+        for (endpoint, method) in endpoints_to_test {
+            let response = match method {
+                "GET" => server.get(endpoint).await,
+                _ => continue,
+            };
+            
+            response.assert_status_ok();
+            let response_body: Value = response.json();
+            
+            // All responses should have success/data/error structure
+            assert!(response_body.get("success").is_some(), "{} should have 'success' field with {:?}", endpoint, provider);
+            assert!(response_body.get("data").is_some(), "{} should have 'data' field with {:?}", endpoint, provider);
+            assert!(response_body.get("error").is_some(), "{} should have 'error' field with {:?}", endpoint, provider);
+            
+            println!("✅ {} API consistent with {:?} provider", endpoint, provider);
+        }
+    }
 }

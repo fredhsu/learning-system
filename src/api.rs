@@ -411,40 +411,15 @@ pub async fn submit_session_answer(
                 question_index = request.question_index,
                 is_correct = grading_result.is_correct,
                 suggested_rating = grading_result.suggested_rating,
-                "Session answer graded successfully, updating card review"
+                "Session answer graded successfully (FSRS update deferred until card completion)"
             );
             
-            // Update card with FSRS based on the suggested rating
-            match state.card_service.review_card(card_id, grading_result.suggested_rating).await {
-                Ok(Some(updated_card)) => {
-                    info!(
-                        session_id = %session_id,
-                        card_id = %card_id,
-                        new_next_review = %updated_card.next_review.to_string(),
-                        "Card review updated successfully after session quiz"
-                    );
-                    
-                    Ok(Json(ApiResponse::success(json!({
-                        "is_correct": grading_result.is_correct,
-                        "feedback": grading_result.feedback,
-                        "rating": grading_result.suggested_rating,
-                        "next_review": updated_card.next_review
-                    }))))
-                },
-                Ok(None) => {
-                    warn!(card_id = %card_id, "Card not found when updating review after session quiz");
-                    Err(StatusCode::NOT_FOUND)
-                },
-                Err(e) => {
-                    error!(
-                        card_id = %card_id,
-                        rating = grading_result.suggested_rating,
-                        error = %e,
-                        "Error updating card review after session quiz"
-                    );
-                    Err(StatusCode::INTERNAL_SERVER_ERROR)
-                }
-            }
+            // Return grading result without updating FSRS - let user rating handle the final update
+            Ok(Json(ApiResponse::success(json!({
+                "is_correct": grading_result.is_correct,
+                "feedback": grading_result.feedback,
+                "rating": grading_result.suggested_rating
+            }))))
         },
         Err(e) => {
             error!(

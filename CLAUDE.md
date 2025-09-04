@@ -66,14 +66,15 @@ cargo fmt            # Code formatting
 ## Key Development Considerations
 
 ### FSRS Integration
-The system uses the rs-fsrs crate for spaced repetition scheduling. Review intervals and difficulty ratings are managed through FSRS state updates after each quiz attempt. Keyboard shortcuts (1-4) map directly to FSRS rating levels (Again, Hard, Good, Easy).
+The system uses the rs-fsrs crate for spaced repetition scheduling. Review intervals and difficulty ratings are managed through FSRS state updates with **single update per card** after all questions are completed. Individual question ratings are collected and averaged to determine the final FSRS rating. Keyboard shortcuts (1-4) map directly to FSRS rating levels (Again, Hard, Good, Easy).
 
 ### Card Linking System
 Cards support wiki-style bidirectional linking with automatic backlink maintenance. When Card A links to Card B, Card B automatically shows Card A in its backlinks section. The linking mechanism preserves referential integrity through foreign key constraints and supports efficient graph traversal for related content discovery. Non-existent link targets are gracefully handled.
 
 ### LLM Integration Points
 - **Batch Quiz Generation**: Multiple cards processed in single API calls for efficiency
-- **Session-Based Answer Grading**: Context-aware grading using actual questions from session storage with suggested rating display
+- **Session-Based Answer Grading**: Context-aware grading using actual questions from session storage with suggested rating display (deferred FSRS updates)
+- **Rating Aggregation**: Individual question ratings are collected and averaged for single FSRS update per card
 - **Semantic Answer Grading**: Advanced grading with comprehensive understanding prompts
 - **Smart Card Ordering**: Content similarity and difficulty-based optimization for better LLM context
 - **Structured Logging**: Comprehensive performance monitoring and debugging capabilities
@@ -81,7 +82,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 
 ### Database Constraints
 - SQLite is used for simplicity and portability
-- FSRS statistics must be atomically updated with review submissions
+- FSRS statistics are updated once per card after all questions are completed (prevents multiple overwrites)
 - Card content supports LaTeX/MathJax markup for mathematical expressions (both inline `$...$` and display `$$...$$`)
 - Search functionality uses case-insensitive LIKE queries for content matching
 - Backlinks maintain referential integrity through CASCADE DELETE foreign key constraints
@@ -102,7 +103,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Cards**: Preview system for long content with expand/collapse functionality
 - **Linking**: Bidirectional backlinks with automatic maintenance and distinct visual styling
 - **Math Rendering**: Full LaTeX support with inline `$...$` and display `$$...$$` math
-- **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), completion celebrations, and suggested rating display
+- **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), completion celebrations, suggested rating display, and aggregated FSRS updates
 - **Responsive**: Mobile-first design with touch-friendly interactions
 - **Feedback**: Toast notifications, skeleton loading, and enhanced error handling
 - **Accessibility**: High contrast mode, reduced motion, semantic HTML
@@ -132,6 +133,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Performance Tests**: API call reduction, content bucketing, overdue ratio calculations
 - **Session Answer Tests**: Context-aware answer submission and multiple choice grading validation with suggested rating display
 - **Suggested Rating Tests**: UI response format validation for suggested rating display functionality
+- **FSRS Integration Tests**: Single update per card validation, rating aggregation, and deferred update functionality
 
 ### Development Notes
 - All Phase 2 UI/UX improvements from UI_IMPROVEMENTS.md completed
@@ -141,18 +143,20 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - Batch processing infrastructure with robust fallback mechanisms
 - Smart card ordering with multi-factor optimization algorithms
 - Comprehensive structured logging throughout the system
-- Session-based answer submission fixes multiple choice grading issue
+- Session-based answer submission fixes multiple choice grading issue with deferred FSRS updates
+- Rating aggregation system prevents FSRS overwrite issues and provides balanced difficulty assessment
 - Legacy endpoint cleanup removes unused and problematic API routes
 - Design system provides consistent foundation for future development
 - Mobile-first responsive approach supports modern device usage patterns
-- 114 total tests covering all functionality including session answer submission and suggested rating display
+- 114 total tests covering all functionality including FSRS integration and rating aggregation
 
 ### Performance Achievements
 - **API Call Reduction**: 85-90% fewer calls per review session (from ~15-20 to 1-2 calls)
 - **Session Initialization**: Instant question access through batch pre-generation
 - **Smart Ordering**: Optimized card sequence for better LLM context utilization
 - **Context-Aware Grading**: Multiple choice questions graded against actual question context with AI-powered suggested ratings
+- **FSRS Optimization**: Single database update per card with aggregated ratings (prevents overwrite issues)
 - **Monitoring**: Comprehensive structured logging for performance visibility
 
-**Latest Update**: Suggested rating display feature implemented - users now see AI-recommended difficulty ratings alongside answer feedback with visual button highlighting
+**Latest Update**: FSRS multiple updates fix implemented - system now collects all question ratings and performs single aggregated FSRS update per card, preventing overwrite issues and providing more accurate spaced repetition scheduling
 **Next Phase**: Ready for Phase 4 advanced features (session persistence, dark mode, advanced study statistics)

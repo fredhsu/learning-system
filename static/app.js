@@ -897,27 +897,39 @@ class LearningSystem {
     }
 
     async rateCard(rating) {
-        const { card } = this.currentQuiz;
+        const { card, questions } = this.currentQuiz;
         
-        try {
-            await this.apiCall(`/cards/${card.id}/review`, {
-                method: 'POST',
-                body: JSON.stringify({ rating })
-            });
+        // Store the rating for this question
+        if (!this.currentQuiz.questionRatings) {
+            this.currentQuiz.questionRatings = [];
+        }
+        this.currentQuiz.questionRatings[this.currentQuiz.currentQuestion] = rating;
+        
+        console.log(`Question ${this.currentQuiz.currentQuestion + 1} rated: ${rating}`);
 
-            // Move to next question or end quiz
-            this.currentQuiz.currentQuestion++;
-            if (this.currentQuiz.currentQuestion < this.currentQuiz.questions.length) {
-                // Clear feedback and animations
-                document.getElementById('quiz-feedback').innerHTML = '';
-                document.querySelectorAll('.option').forEach(option => {
-                    option.classList.remove('correct-flash', 'incorrect-flash', 'selected');
-                });
-                document.querySelector('.question').classList.remove('answering');
-                document.getElementById('quiz-questions').classList.remove('fade-in');
+        // Move to next question or end quiz
+        this.currentQuiz.currentQuestion++;
+        if (this.currentQuiz.currentQuestion < this.currentQuiz.questions.length) {
+            // More questions remaining - continue without FSRS update
+            document.getElementById('quiz-feedback').innerHTML = '';
+            document.querySelectorAll('.option').forEach(option => {
+                option.classList.remove('correct-flash', 'incorrect-flash', 'selected');
+            });
+            document.querySelector('.question').classList.remove('answering');
+            document.getElementById('quiz-questions').classList.remove('fade-in');
+            
+            this.renderQuestion();
+        } else {
+            // All questions completed - calculate final rating and update FSRS
+            try {
+                const finalRating = this.calculateFinalRating(this.currentQuiz.questionRatings);
+                console.log(`All questions completed. Ratings: [${this.currentQuiz.questionRatings.join(', ')}], Final rating: ${finalRating}`);
                 
-                this.renderQuestion();
-            } else {
+                await this.apiCall(`/cards/${card.id}/review`, {
+                    method: 'POST',
+                    body: JSON.stringify({ rating: finalRating })
+                });
+
                 // Card completed, move to next card or end session
                 this.reviewSession.currentCardIndex++;
                 this.updateRemainingCount();
@@ -933,10 +945,37 @@ class LearningSystem {
                     // All cards completed - show celebration
                     this.showCompletionScreen();
                 }
+            } catch (error) {
+                this.showError('Failed to submit final rating');
+                console.error('Error submitting final card rating:', error);
             }
-        } catch (error) {
-            this.showError('Failed to record rating');
         }
+    }
+
+    calculateFinalRating(questionRatings) {
+        // Strategy: Use the average of all question ratings, rounded to nearest integer
+        // This provides a balanced assessment across all questions
+        
+        if (!questionRatings || questionRatings.length === 0) {
+            console.warn('No question ratings provided, defaulting to rating 3 (Good)');
+            return 3;
+        }
+        
+        // Filter out any undefined/null ratings
+        const validRatings = questionRatings.filter(rating => rating !== undefined && rating !== null);
+        
+        if (validRatings.length === 0) {
+            console.warn('No valid question ratings found, defaulting to rating 3 (Good)');
+            return 3;
+        }
+        
+        // Calculate average and round to nearest integer (1-4 range)
+        const average = validRatings.reduce((sum, rating) => sum + rating, 0) / validRatings.length;
+        const finalRating = Math.round(Math.max(1, Math.min(4, average)));
+        
+        console.log(`Rating calculation: [${validRatings.join(', ')}] -> average: ${average.toFixed(2)} -> final: ${finalRating}`);
+        
+        return finalRating;
     }
 
     async editCard(cardId) {

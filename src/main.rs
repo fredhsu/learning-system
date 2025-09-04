@@ -26,7 +26,7 @@ use crate::{
     api::{create_router, AppState},
     card_service::CardService,
     database::Database,
-    llm_service::LLMService,
+    llm_service::{LLMService, LLMProvider},
 };
 
 #[tokio::main]
@@ -41,6 +41,8 @@ async fn main() -> Result<()> {
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:learning.db".to_string());
     let llm_api_key = env::var("LLM_API_KEY").unwrap_or_else(|_| "your-api-key".to_string());
     let llm_base_url = env::var("LLM_BASE_URL").ok();
+    let llm_provider = env::var("LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string());
+    let llm_model = env::var("LLM_MODEL").ok();
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
 
     info!("Starting Learning System server...");
@@ -51,7 +53,20 @@ async fn main() -> Result<()> {
 
     // Initialize services
     let card_service = CardService::new(db);
-    let llm_service = LLMService::new(llm_api_key, llm_base_url);
+    
+    // Parse LLM provider configuration
+    let provider = match llm_provider.to_lowercase().as_str() {
+        "gemini" | "google" => LLMProvider::Gemini,
+        "openai" | "chatgpt" | "gpt" => LLMProvider::OpenAI,
+        _ => {
+            info!("Unknown LLM provider '{}', defaulting to OpenAI", llm_provider);
+            LLMProvider::OpenAI
+        }
+    };
+    
+    let llm_service = LLMService::new_with_provider(llm_api_key, llm_base_url, provider.clone(), llm_model);
+    
+    info!("Initialized LLM service with provider: {:?}", provider);
 
     // Create application state
     let state = AppState {
