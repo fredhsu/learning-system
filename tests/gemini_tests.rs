@@ -89,6 +89,7 @@ fn create_test_card() -> Card {
     Card {
         id: Uuid::new_v4(),
         zettel_id: "TEST-001".to_string(),
+        title: None,
         content: "This is a test card about machine learning fundamentals. It covers basic concepts like supervised learning, unsupervised learning, and reinforcement learning.".to_string(),
         creation_date: Utc::now(),
         last_reviewed: None,

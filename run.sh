@@ -87,5 +87,5 @@ echo ""
 
 # Build and run the application
 echo "Building and starting application..."
-cargo run --release
+cargo run --release --bin learning-system
 

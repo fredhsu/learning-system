@@ -8,6 +8,7 @@ use uuid::Uuid;
 pub struct Card {
     pub id: Uuid,
     pub zettel_id: String, // Human-readable unique identifier for Zettelkasten linking
+    pub title: Option<String>,
     pub content: String,
     pub creation_date: DateTime<Utc>,
     pub last_reviewed: Option<DateTime<Utc>>,
@@ -47,6 +48,7 @@ pub struct Review {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCardRequest {
     pub zettel_id: String, // Required user-defined unique identifier
+    pub title: Option<String>,
     pub content: String,
     pub topic_ids: Vec<Uuid>,
     pub links: Option<Vec<Uuid>>,
@@ -55,6 +57,7 @@ pub struct CreateCardRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCardWithZettelLinksRequest {
     pub zettel_id: String,
+    pub title: Option<String>,
     pub content: String,
     pub topic_ids: Vec<Uuid>,
     pub zettel_links: Option<Vec<String>>,
@@ -63,6 +66,7 @@ pub struct CreateCardWithZettelLinksRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateCardRequest {
     pub zettel_id: Option<String>,
+    pub title: Option<String>,
     pub content: Option<String>,
     pub topic_ids: Option<Vec<Uuid>>,
     pub links: Option<Vec<Uuid>>,
@@ -71,6 +75,7 @@ pub struct UpdateCardRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateCardWithZettelLinksRequest {
     pub zettel_id: Option<String>,
+    pub title: Option<String>,
     pub content: Option<String>,
     pub topic_ids: Option<Vec<Uuid>>,
     pub zettel_links: Option<Vec<String>>,

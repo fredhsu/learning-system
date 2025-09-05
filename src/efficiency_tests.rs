@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod efficiency_tests {
-    use super::*;
     use crate::database::Database;
     use crate::card_service::CardService;
     use crate::llm_service::LLMService;
@@ -21,6 +20,7 @@ mod efficiency_tests {
         // Create cards with different content lengths and difficulties
         let short_card = card_service.create_card(CreateCardRequest {
             zettel_id: "SHORT-001".to_string(),
+            title: None,
             content: "Short content".to_string(),
             topic_ids: vec![],
             links: None,
@@ -28,6 +28,7 @@ mod efficiency_tests {
 
         let long_card = card_service.create_card(CreateCardRequest {
             zettel_id: "LONG-001".to_string(),
+            title: None,
             content: "This is a much longer piece of content that spans multiple sentences and contains more detailed information about the topic at hand. It includes various concepts and explanations that require more thorough understanding and processing.".to_string(),
             topic_ids: vec![],
             links: None,
@@ -49,6 +50,7 @@ mod efficiency_tests {
         // Create test cards
         let card1 = card_service.create_card(CreateCardRequest {
             zettel_id: "BATCH-001".to_string(),
+            title: None,
             content: "Machine learning is a subset of artificial intelligence.".to_string(),
             topic_ids: vec![],
             links: None,
@@ -56,6 +58,7 @@ mod efficiency_tests {
 
         let card2 = card_service.create_card(CreateCardRequest {
             zettel_id: "BATCH-002".to_string(),
+            title: None,
             content: "Neural networks are inspired by biological neurons.".to_string(),
             topic_ids: vec![],
             links: None,
@@ -130,6 +133,7 @@ mod efficiency_tests {
         let card = crate::models::Card {
             id: Uuid::new_v4(),
             zettel_id: "TEST".to_string(),
+            title: None,
             content: "Test".to_string(),
             creation_date: now - chrono::Duration::days(2),
             last_reviewed: Some(now - chrono::Duration::days(1)),

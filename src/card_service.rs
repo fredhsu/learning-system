@@ -54,6 +54,7 @@ impl CardService {
 
         let create_request = CreateCardRequest {
             zettel_id: request.zettel_id,
+            title: request.title,
             content: request.content,
             topic_ids: request.topic_ids,
             links,
@@ -136,6 +137,10 @@ impl CardService {
             }
         }
 
+        if let Some(title) = request.title {
+            card.title = Some(title);
+        }
+
         if let Some(content) = request.content {
             card.content = content;
         }
@@ -180,6 +185,7 @@ impl CardService {
 
         let update_request = UpdateCardRequest {
             zettel_id: request.zettel_id,
+            title: request.title,
             content: request.content,
             topic_ids: request.topic_ids,
             links,
@@ -377,6 +383,7 @@ mod tests {
         // Create
         let create_request = CreateCardRequest {
             zettel_id: "SERVICE-TEST-001".to_string(),
+            title: Some("Service Test Card".to_string()),
             content: "Service test card".to_string(),
             topic_ids: vec![],
             links: None,
@@ -393,6 +400,7 @@ mod tests {
         // Update
         let update_request = UpdateCardRequest {
             zettel_id: Some("SERVICE-TEST-002".to_string()),
+            title: Some("Updated Service Test Card".to_string()),
             content: Some("Updated service test card".to_string()),
             topic_ids: None,
             links: None,
@@ -415,6 +423,7 @@ mod tests {
         let service = create_test_service().await;
 
         let create_request = CreateCardRequest {
+            title: None,
             zettel_id: "SERVICE-TEST-003".to_string(),
             content: "Original".to_string(),
             topic_ids: vec![],
@@ -425,6 +434,7 @@ mod tests {
 
         // Update only content, leave links unchanged
         let update_request = UpdateCardRequest {
+            title: None,
             zettel_id: Some("SERVICE-TEST-004".to_string()),
             content: Some("Updated".to_string()),
             topic_ids: None,
@@ -442,6 +452,7 @@ mod tests {
 
         // Create two cards
         let card1 = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "SERVICE-TEST-005".to_string(),
             content: "Card 1".to_string(),
             topic_ids: vec![],
@@ -449,6 +460,7 @@ mod tests {
         }).await.unwrap();
 
         let card2 = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "SERVICE-TEST-006".to_string(),
             content: "Card 2".to_string(),
             topic_ids: vec![],
@@ -457,6 +469,7 @@ mod tests {
 
         // Link card1 to card2
         let update_request = UpdateCardRequest {
+            title: None,
             zettel_id: Some("SERVICE-TEST-007".to_string()),
             content: None,
             topic_ids: None,
@@ -480,6 +493,7 @@ mod tests {
         let service = create_test_service().await;
 
         let card = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "SERVICE-TEST-008".to_string(),
             content: "Review test".to_string(),
             topic_ids: vec![],
@@ -518,6 +532,7 @@ mod tests {
 
         // Create three cards
         let card1 = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "1.1".to_string(),
             content: "Card 1 content".to_string(),
             topic_ids: vec![],
@@ -525,6 +540,7 @@ mod tests {
         }).await.unwrap();
 
         let _card2 = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "1.2".to_string(),
             content: "Card 2 content".to_string(),
             topic_ids: vec![],
@@ -532,6 +548,7 @@ mod tests {
         }).await.unwrap();
 
         let _card3 = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "2.1".to_string(),
             content: "Card 3 content".to_string(),
             topic_ids: vec![],
@@ -544,6 +561,7 @@ mod tests {
         
         // Update card1 to link to cards 2 and 3 by Zettel ID
         let update_request = UpdateCardRequest {
+            title: None,
             zettel_id: None,
             content: None,
             topic_ids: None,
@@ -577,6 +595,7 @@ mod tests {
 
         // Create one valid card
         let _card = service.create_card(CreateCardRequest {
+            title: None,
             zettel_id: "valid.1".to_string(),
             content: "Valid card".to_string(),
             topic_ids: vec![],
@@ -600,6 +619,7 @@ mod tests {
 
         // Test updating nonexistent card
         let update_request = UpdateCardRequest {
+            title: None,
             zettel_id: Some("SERVICE-TEST-009".to_string()),
             content: Some("Should fail".to_string()),
             topic_ids: None,

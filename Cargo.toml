@@ -2,6 +2,7 @@
 name = "learning-system"
 version = "0.1.0"
 edition = "2024"
+default-run = "learning-system"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
@@ -21,6 +22,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 dotenvy = "0.15"
+regex = "1.10"
+
+[[bin]]
+name = "migrate_titles"
+path = "src/bin/migrate_titles.rs"
 
 [dev-dependencies]
 axum-test = "15.0"

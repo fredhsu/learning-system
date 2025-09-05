@@ -806,6 +806,9 @@ class LearningSystem {
 
     async startQuiz(card) {
         try {
+            // Clear any previous feedback before starting new quiz
+            document.getElementById('quiz-feedback').innerHTML = '';
+            
             // Display the card content with transition
             const cardDisplay = document.getElementById('card-content-display');
             cardDisplay.classList.add('quiz-transition');
@@ -852,38 +855,47 @@ class LearningSystem {
     }
 
     renderQuestion() {
-        const { questions, currentQuestion } = this.currentQuiz;
-        const question = questions[currentQuestion];
+        const { questions } = this.currentQuiz;
         
         const container = document.getElementById('quiz-questions');
         container.classList.add('quiz-transition');
         
-        let questionHTML = `
-            <div class="question">
-                <h4>Question ${currentQuestion + 1} of ${questions.length}</h4>
-                <p>${question.question}</p>
+        // Render all questions at once
+        const questionsHTML = questions.map((question, questionIndex) => {
+            let questionHTML = `
+                <div class="question" data-question-index="${questionIndex}">
+                    <h4>Question ${questionIndex + 1} of ${questions.length}</h4>
+                    <p>${question.question}</p>
+            `;
+
+            if (question.question_type === 'multiple_choice' && question.options) {
+                questionHTML += `
+                    <div class="options" data-question-index="${questionIndex}">
+                        ${question.options.map((option, index) => `
+                            <div class="option" data-option="${String.fromCharCode(65 + index)}" data-option-text="${option}" data-question-index="${questionIndex}">
+                                ${String.fromCharCode(65 + index)}. ${option}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                questionHTML += `
+                    <textarea class="short-answer" data-question-index="${questionIndex}" placeholder="Enter your answer..."></textarea>
+                `;
+            }
+
+            questionHTML += '</div>';
+            return questionHTML;
+        }).join('');
+        
+        // Add submit button for all questions
+        const submitButtonHTML = `
+            <div class="batch-submit-container">
+                <button class="primary-btn" onclick="app.submitAllAnswers()">Submit All Answers</button>
+            </div>
         `;
-
-        if (question.question_type === 'multiple_choice' && question.options) {
-            questionHTML += `
-                <div class="options">
-                    ${question.options.map((option, index) => `
-                        <div class="option" data-option="${String.fromCharCode(65 + index)}" data-option-text="${option}">
-                            ${String.fromCharCode(65 + index)}. ${option}
-                        </div>
-                    `).join('')}
-                </div>
-                <button class="primary-btn" onclick="app.submitAnswer()">Submit Answer</button>
-            `;
-        } else {
-            questionHTML += `
-                <textarea class="short-answer" placeholder="Enter your answer..."></textarea>
-                <button class="primary-btn" onclick="app.submitAnswer()">Submit Answer</button>
-            `;
-        }
-
-        questionHTML += '</div>';
-        container.innerHTML = questionHTML;
+        
+        container.innerHTML = questionsHTML + submitButtonHTML;
 
         // Update progress indicators
         this.updateProgressIndicators();
@@ -896,99 +908,200 @@ class LearningSystem {
         // Add click listeners for multiple choice options
         document.querySelectorAll('.option').forEach(option => {
             option.addEventListener('click', () => {
-                document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+                const questionIndex = option.dataset.questionIndex;
+                // Remove selection from other options in the same question
+                document.querySelectorAll(`[data-question-index="${questionIndex}"].option`).forEach(o => o.classList.remove('selected'));
                 option.classList.add('selected');
-                // Add visual feedback
-                const questionElement = document.querySelector('.question');
+                // Add visual feedback to the question
+                const questionElement = document.querySelector(`[data-question-index="${questionIndex}"].question`);
                 questionElement.classList.add('answering');
+                
+                // Check if all questions are answered
+                this.checkAllQuestionsAnswered();
             });
         });
 
-        // Add typing listener for short answer
-        const shortAnswerField = document.querySelector('.short-answer');
-        if (shortAnswerField) {
-            shortAnswerField.addEventListener('input', () => {
-                const questionElement = document.querySelector('.question');
-                if (shortAnswerField.value.trim()) {
+        // Add typing listener for short answer fields
+        document.querySelectorAll('.short-answer').forEach(field => {
+            field.addEventListener('input', () => {
+                const questionIndex = field.dataset.questionIndex;
+                const questionElement = document.querySelector(`[data-question-index="${questionIndex}"].question`);
+                if (field.value.trim()) {
                     questionElement.classList.add('answering');
                 } else {
                     questionElement.classList.remove('answering');
                 }
+                
+                // Check if all questions are answered
+                this.checkAllQuestionsAnswered();
             });
+        });
+    }
+
+    checkAllQuestionsAnswered() {
+        const { questions } = this.currentQuiz;
+        const submitButton = document.querySelector('.batch-submit-container .primary-btn');
+        
+        let allAnswered = true;
+        
+        for (let i = 0; i < questions.length; i++) {
+            const question = questions[i];
+            
+            if (question.question_type === 'multiple_choice') {
+                const selectedOption = document.querySelector(`[data-question-index="${i}"].option.selected`);
+                if (!selectedOption) {
+                    allAnswered = false;
+                    break;
+                }
+            } else {
+                const textField = document.querySelector(`[data-question-index="${i}"].short-answer`);
+                if (!textField || !textField.value.trim()) {
+                    allAnswered = false;
+                    break;
+                }
+            }
+        }
+        
+        // Enable/disable submit button based on completion
+        if (submitButton) {
+            submitButton.disabled = !allAnswered;
+            if (allAnswered) {
+                submitButton.classList.add('ready');
+            } else {
+                submitButton.classList.remove('ready');
+            }
         }
     }
 
-    async submitAnswer() {
-        const { card, questions, currentQuestion } = this.currentQuiz;
-        const question = questions[currentQuestion];
+    async submitAllAnswers() {
+        const { card, questions } = this.currentQuiz;
         
-        let answer;
-        if (question.question_type === 'multiple_choice') {
-            const selected = document.querySelector('.option.selected');
-            if (!selected) {
-                this.showError('Please select an answer');
-                return;
+        // Collect all answers
+        const answers = [];
+        let allAnswered = true;
+        
+        for (let i = 0; i < questions.length; i++) {
+            const question = questions[i];
+            let answer = null;
+            
+            if (question.question_type === 'multiple_choice') {
+                const selectedOption = document.querySelector(`[data-question-index="${i}"].option.selected`);
+                if (!selectedOption) {
+                    allAnswered = false;
+                    break;
+                }
+                answer = selectedOption.dataset.optionText;
+            } else {
+                const textField = document.querySelector(`[data-question-index="${i}"].short-answer`);
+                if (!textField || !textField.value.trim()) {
+                    allAnswered = false;
+                    break;
+                }
+                answer = textField.value.trim();
             }
-            answer = selected.dataset.optionText;
-        } else {
-            answer = document.querySelector('.short-answer').value.trim();
-            if (!answer) {
-                this.showError('Please enter an answer');
-                return;
-            }
+            
+            answers.push(answer);
+        }
+        
+        if (!allAnswered) {
+            this.showError('Please answer all questions before submitting');
+            return;
         }
 
         // Disable submit button to prevent double submission
-        const submitButton = document.querySelector('.primary-btn');
+        const submitButton = document.querySelector('.batch-submit-container .primary-btn');
         submitButton.disabled = true;
         submitButton.textContent = 'Submitting...';
 
         try {
-            // Use the new session-based endpoint for context-aware grading
-            const question = this.currentQuiz.questions[currentQuestion];
-            const result = await this.apiCall(`/review/session/${this.reviewSession.sessionId}/answer/${card.id}`, {
-                method: 'POST',
-                body: JSON.stringify({
-                    question_index: currentQuestion,
-                    answer: answer
-                })
-            });
+            // Submit all answers at once
+            const results = [];
+            
+            for (let i = 0; i < questions.length; i++) {
+                const result = await this.apiCall(`/review/session/${this.reviewSession.sessionId}/answer/${card.id}`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        question_index: i,
+                        answer: answers[i]
+                    })
+                });
+                results.push(result);
+            }
 
-            this.showFeedback(result, question);
+            // Show feedback for all questions
+            this.showBatchFeedback(results, questions);
         } catch (error) {
-            this.showError('Failed to submit answer');
+            this.showError('Failed to submit answers');
             // Re-enable button on error
             submitButton.disabled = false;
-            submitButton.textContent = 'Submit Answer';
+            submitButton.textContent = 'Submit All Answers';
         }
     }
 
-    showFeedback(grading, question) {
+    async submitAnswer() {
+        // Legacy method - now redirects to batch submission
+        this.submitAllAnswers();
+    }
+
+    showBatchFeedback(results, questions) {
         const feedbackContainer = document.getElementById('quiz-feedback');
         
-        // Update statistics
-        this.reviewSession.totalQuestions++;
-        if (grading.is_correct) {
-            this.reviewSession.correctAnswers++;
-        }
-
-        // Add visual feedback to options if multiple choice
-        if (question.question_type === 'multiple_choice') {
-            const selectedOption = document.querySelector('.option.selected');
-            const allOptions = document.querySelectorAll('.option');
-            
-            // Find correct option
-            allOptions.forEach(option => {
-                if (option.dataset.optionText === question.correct_answer) {
-                    option.classList.add('correct-flash');
-                }
-            });
-            
-            // Highlight incorrect selection if wrong
-            if (selectedOption && !grading.is_correct) {
-                selectedOption.classList.add('incorrect-flash');
+        // Update statistics for all questions
+        let totalCorrect = 0;
+        results.forEach((grading, index) => {
+            this.reviewSession.totalQuestions++;
+            if (grading.is_correct) {
+                this.reviewSession.correctAnswers++;
+                totalCorrect++;
             }
+            
+            const question = questions[index];
+            
+            // Add visual feedback to options if multiple choice
+            if (question.question_type === 'multiple_choice') {
+                const selectedOption = document.querySelector(`[data-question-index="${index}"].option.selected`);
+                const questionOptions = document.querySelectorAll(`[data-question-index="${index}"].option`);
+                
+                // Find and highlight correct option
+                questionOptions.forEach(option => {
+                    if (option.dataset.optionText === question.correct_answer) {
+                        option.classList.add('correct-flash');
+                    }
+                });
+                
+                // Highlight incorrect selection if wrong
+                if (selectedOption && !grading.is_correct) {
+                    selectedOption.classList.add('incorrect-flash');
+                }
+            } else {
+                // For short answer questions, highlight the input based on correctness
+                const textField = document.querySelector(`[data-question-index="${index}"].short-answer`);
+                if (textField) {
+                    if (grading.is_correct) {
+                        textField.classList.add('correct-answer');
+                    } else {
+                        textField.classList.add('incorrect-answer');
+                    }
+                }
+            }
+        });
+        
+        // Calculate overall performance and suggested rating
+        const correctPercentage = (totalCorrect / questions.length) * 100;
+        let suggestedRating = 3; // Default to Good
+        
+        if (correctPercentage >= 90) {
+            suggestedRating = 4; // Easy
+        } else if (correctPercentage >= 70) {
+            suggestedRating = 3; // Good
+        } else if (correctPercentage >= 50) {
+            suggestedRating = 2; // Hard
+        } else {
+            suggestedRating = 1; // Again
         }
+        
+        // Store individual ratings for averaging (fallback to suggested rating)
+        this.currentQuiz.questionRatings = results.map(result => result.rating || suggestedRating);
         
         // Create rating name helper function
         const getRatingName = (rating) => {
@@ -996,75 +1109,87 @@ class LearningSystem {
             return ratingNames[rating] || 'Unknown';
         };
         
+        // Generate detailed feedback HTML
+        const detailedFeedbackHTML = results.map((grading, index) => {
+            const question = questions[index];
+            return `
+                <div class="question-feedback ${grading.is_correct ? 'correct' : 'incorrect'}">
+                    <div class="question-feedback-header">
+                        <h5>Question ${index + 1}</h5>
+                        <span class="result-badge ${grading.is_correct ? 'correct' : 'incorrect'}">
+                            ${grading.is_correct ? '✓ Correct' : '✗ Incorrect'}
+                        </span>
+                    </div>
+                    <p class="feedback-text">${grading.feedback}</p>
+                    ${question.correct_answer && !grading.is_correct ? `<p class="correct-answer-display"><strong>Correct answer:</strong> ${question.correct_answer}</p>` : ''}
+                </div>
+            `;
+        }).join('');
+        
         feedbackContainer.innerHTML = `
-            <div class="feedback ${grading.is_correct ? 'correct' : 'incorrect'} feedback-transition">
-                <h4>${grading.is_correct ? 'Correct!' : 'Incorrect'}</h4>
-                <p>${grading.feedback}</p>
-                ${question.correct_answer ? `<p><strong>Correct answer:</strong> ${question.correct_answer}</p>` : ''}
-                ${grading.rating ? `<p class="suggested-rating"><strong>Suggested rating:</strong> ${getRatingName(grading.rating)} (${grading.rating})</p>` : ''}
-            </div>
-            <div class="rating-buttons">
-                <button class="rating-btn again rating-btn-with-shortcut ${grading.rating === 1 ? 'suggested' : ''}" data-shortcut="1" onclick="app.rateCard(1)">Again</button>
-                <button class="rating-btn hard rating-btn-with-shortcut ${grading.rating === 2 ? 'suggested' : ''}" data-shortcut="2" onclick="app.rateCard(2)">Hard</button>
-                <button class="rating-btn good rating-btn-with-shortcut ${grading.rating === 3 ? 'suggested' : ''}" data-shortcut="3" onclick="app.rateCard(3)">Good</button>
-                <button class="rating-btn easy rating-btn-with-shortcut ${grading.rating === 4 ? 'suggested' : ''}" data-shortcut="4" onclick="app.rateCard(4)">Easy</button>
+            <div class="batch-feedback feedback-transition">
+                <div class="batch-summary">
+                    <h4>Results Summary</h4>
+                    <div class="score-display">
+                        <span class="score-number">${totalCorrect}/${questions.length}</span>
+                        <span class="score-percentage">(${Math.round(correctPercentage)}%)</span>
+                    </div>
+                    <p class="suggested-rating"><strong>Suggested rating:</strong> ${getRatingName(suggestedRating)} (${suggestedRating})</p>
+                </div>
+                
+                <div class="detailed-feedback">
+                    <h5>Question Details</h5>
+                    ${detailedFeedbackHTML}
+                </div>
+                
+                <div class="rating-buttons">
+                    <button class="rating-btn again rating-btn-with-shortcut ${suggestedRating === 1 ? 'suggested' : ''}" data-shortcut="1" onclick="app.rateCard(1)">Again</button>
+                    <button class="rating-btn hard rating-btn-with-shortcut ${suggestedRating === 2 ? 'suggested' : ''}" data-shortcut="2" onclick="app.rateCard(2)">Hard</button>
+                    <button class="rating-btn good rating-btn-with-shortcut ${suggestedRating === 3 ? 'suggested' : ''}" data-shortcut="3" onclick="app.rateCard(3)">Good</button>
+                    <button class="rating-btn easy rating-btn-with-shortcut ${suggestedRating === 4 ? 'suggested' : ''}" data-shortcut="4" onclick="app.rateCard(4)">Easy</button>
+                </div>
             </div>
         `;
+    }
+
+    showFeedback(grading, question) {
+        // Legacy method - maintained for backward compatibility
+        this.showBatchFeedback([grading], [question]);
     }
 
     async rateCard(rating) {
         const { card, questions } = this.currentQuiz;
         
-        // Store the rating for this question
-        if (!this.currentQuiz.questionRatings) {
-            this.currentQuiz.questionRatings = [];
-        }
-        this.currentQuiz.questionRatings[this.currentQuiz.currentQuestion] = rating;
+        // In batch mode, we use the stored questionRatings or default to the user's override
+        const finalRating = rating; // User can override the suggested rating
         
-        console.log(`Question ${this.currentQuiz.currentQuestion + 1} rated: ${rating}`);
+        console.log(`Card rated with final rating: ${finalRating}`);
 
-        // Move to next question or end quiz
-        this.currentQuiz.currentQuestion++;
-        if (this.currentQuiz.currentQuestion < this.currentQuiz.questions.length) {
-            // More questions remaining - continue without FSRS update
-            document.getElementById('quiz-feedback').innerHTML = '';
-            document.querySelectorAll('.option').forEach(option => {
-                option.classList.remove('correct-flash', 'incorrect-flash', 'selected');
+        try {
+            // Submit the final rating to update FSRS
+            await this.apiCall(`/cards/${card.id}/review`, {
+                method: 'POST',
+                body: JSON.stringify({ rating: finalRating })
             });
-            document.querySelector('.question').classList.remove('answering');
-            document.getElementById('quiz-questions').classList.remove('fade-in');
-            
-            this.renderQuestion();
-        } else {
-            // All questions completed - calculate final rating and update FSRS
-            try {
-                const finalRating = this.calculateFinalRating(this.currentQuiz.questionRatings);
-                console.log(`All questions completed. Ratings: [${this.currentQuiz.questionRatings.join(', ')}], Final rating: ${finalRating}`);
-                
-                await this.apiCall(`/cards/${card.id}/review`, {
-                    method: 'POST',
-                    body: JSON.stringify({ rating: finalRating })
-                });
 
-                // Card completed, move to next card or end session
-                this.reviewSession.currentCardIndex++;
-                this.updateRemainingCount();
-                
-                if (this.reviewSession.currentCardIndex < this.reviewSession.totalCards) {
-                    // Start next card
-                    const nextCard = this.reviewSession.dueCards[this.reviewSession.currentCardIndex];
-                    document.getElementById('quiz-feedback').innerHTML = '';
-                    document.getElementById('card-content-display').classList.remove('fade-in');
-                    document.getElementById('quiz-questions').classList.remove('fade-in');
-                    await this.startQuiz(nextCard);
-                } else {
-                    // All cards completed - show celebration
-                    this.showCompletionScreen();
-                }
-            } catch (error) {
-                this.showError('Failed to submit final rating');
-                console.error('Error submitting final card rating:', error);
+            // Card completed, move to next card or end session
+            this.reviewSession.currentCardIndex++;
+            this.updateRemainingCount();
+            
+            if (this.reviewSession.currentCardIndex < this.reviewSession.totalCards) {
+                // Start next card
+                const nextCard = this.reviewSession.dueCards[this.reviewSession.currentCardIndex];
+                document.getElementById('quiz-feedback').innerHTML = '';
+                document.getElementById('card-content-display').classList.remove('fade-in');
+                document.getElementById('quiz-questions').classList.remove('fade-in');
+                await this.startQuiz(nextCard);
+            } else {
+                // All cards completed - show celebration
+                this.showCompletionScreen();
             }
+        } catch (error) {
+            this.showError('Failed to submit final rating');
+            console.error('Error submitting final card rating:', error);
         }
     }
 
@@ -1288,18 +1413,17 @@ class LearningSystem {
     updateProgressIndicators() {
         if (!this.currentQuiz) return;
         
-        const { questions, currentQuestion } = this.currentQuiz;
+        const { questions } = this.currentQuiz;
         const totalQuestions = questions.length;
-        const currentQuestionNumber = currentQuestion + 1;
         const currentCardNumber = this.reviewSession.currentCardIndex + 1;
         const totalCards = this.reviewSession.totalCards;
         
-        // Update question progress
-        document.getElementById('progress-text').textContent = `Question ${currentQuestionNumber} of ${totalQuestions}`;
+        // Update question progress - show all questions for current card
+        document.getElementById('progress-text').textContent = `All ${totalQuestions} question${totalQuestions !== 1 ? 's' : ''}`;
         document.getElementById('card-progress').textContent = `Card ${currentCardNumber} of ${totalCards}`;
         
-        // Update progress bar
-        const overallProgress = ((this.reviewSession.currentCardIndex * totalQuestions + currentQuestion) / (totalCards * totalQuestions)) * 100;
+        // Update progress bar based on cards completed
+        const overallProgress = (this.reviewSession.currentCardIndex / totalCards) * 100;
         document.getElementById('progress-fill').style.width = `${overallProgress}%`;
     }
 

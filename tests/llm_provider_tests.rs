@@ -6,6 +6,7 @@ fn create_test_card() -> Card {
     Card {
         id: Uuid::new_v4(),
         zettel_id: "TEST-LLM-001".to_string(),
+        title: None,
         content: "Test content for LLM provider validation. This card covers fundamental concepts in computer science including algorithms, data structures, and complexity analysis.".to_string(),
         creation_date: Utc::now(),
         last_reviewed: None,
@@ -145,7 +146,7 @@ async fn test_batch_operations_interface() {
     // Test that batch operations work with both providers
     let card1 = create_test_card();
     let card2 = create_test_card();
-    let cards = vec![card1.clone(), card2.clone()];
+    let _cards = vec![card1.clone(), card2.clone()];
     
     let providers = vec![
         LLMProvider::OpenAI,

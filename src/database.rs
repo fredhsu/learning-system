@@ -7,7 +7,7 @@ use crate::models::*;
 
 #[derive(Clone)]
 pub struct Database {
-    pool: SqlitePool,
+    pub pool: SqlitePool,
 }
 
 impl Database {
@@ -24,6 +24,7 @@ impl Database {
             CREATE TABLE IF NOT EXISTS cards (
                 id TEXT PRIMARY KEY,
                 zettel_id TEXT NOT NULL UNIQUE,
+                title TEXT,
                 content TEXT NOT NULL,
                 creation_date TEXT NOT NULL,
                 last_reviewed TEXT,
@@ -40,6 +41,14 @@ impl Database {
         )
         .execute(&self.pool)
         .await?;
+
+        // Add title column to existing tables if it doesn't exist
+        sqlx::query(
+            "ALTER TABLE cards ADD COLUMN title TEXT"
+        )
+        .execute(&self.pool)
+        .await
+        .ok(); // Ignore error if column already exists
 
         sqlx::query(
             r#"
@@ -120,6 +129,7 @@ impl Database {
         let card = Card {
             id: card_id,
             zettel_id: request.zettel_id,
+            title: request.title,
             content: request.content,
             creation_date: now,
             last_reviewed: None,
@@ -135,13 +145,14 @@ impl Database {
 
         sqlx::query(
             r#"
-            INSERT INTO cards (id, zettel_id, content, creation_date, last_reviewed, next_review, 
+            INSERT INTO cards (id, zettel_id, title, content, creation_date, last_reviewed, next_review, 
                              difficulty, stability, retrievability, reps, lapses, state, links)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             "#,
         )
         .bind(card.id.to_string())
         .bind(&card.zettel_id)
+        .bind(&card.title)
         .bind(&card.content)
         .bind(card.creation_date.to_rfc3339())
         .bind(card.last_reviewed.map(|d| d.to_rfc3339()))
@@ -182,6 +193,7 @@ impl Database {
             Ok(Some(Card {
                 id: Uuid::parse_str(&row.get::<String, _>("id"))?,
                 zettel_id: row.get("zettel_id"),
+                title: row.get("title"),
                 content: row.get("content"),
                 creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
                 last_reviewed: row.get::<Option<String>, _>("last_reviewed")
@@ -226,6 +238,7 @@ impl Database {
             cards.push(Card {
                 id: Uuid::parse_str(&row.get::<String, _>("id"))?,
                 zettel_id: row.get("zettel_id"),
+                title: row.get("title"),
                 content: row.get("content"),
                 creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
                 last_reviewed: row.get::<Option<String>, _>("last_reviewed")
@@ -344,11 +357,12 @@ impl Database {
         sqlx::query(
             r#"
             UPDATE cards 
-            SET zettel_id = ?1, content = ?2, links = ?3
-            WHERE id = ?4
+            SET zettel_id = ?1, title = ?2, content = ?3, links = ?4
+            WHERE id = ?5
             "#,
         )
         .bind(&card.zettel_id)
+        .bind(&card.title)
         .bind(&card.content)
         .bind(&card.links)
         .bind(card.id.to_string())
@@ -370,6 +384,7 @@ impl Database {
             Ok(Some(Card {
                 id: Uuid::parse_str(&row.get::<String, _>("id"))?,
                 zettel_id: row.get("zettel_id"),
+                title: row.get("title"),
                 content: row.get("content"),
                 creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
                 last_reviewed: row.get::<Option<String>, _>("last_reviewed")
@@ -490,6 +505,7 @@ impl Database {
                         linking_cards.push(Card {
                             id: Uuid::parse_str(&row.get::<String, _>("id"))?,
                             zettel_id: row.get("zettel_id"),
+                            title: row.get("title"),
                             content: row.get("content"),
                             creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
                             last_reviewed: row.get::<Option<String>, _>("last_reviewed")
@@ -547,6 +563,7 @@ mod tests {
         
         let create_request = CreateCardRequest {
             zettel_id: "DB-TEST-001".to_string(),
+            title: Some("Test Card Title".to_string()),
             content: "Test card for deletion".to_string(),
             topic_ids: vec![],
             links: None,
@@ -578,6 +595,7 @@ mod tests {
         
         let create_request = CreateCardRequest {
             zettel_id: "DB-TEST-002".to_string(),
+            title: Some("Test Update Title".to_string()),
             content: "Original content".to_string(),
             topic_ids: vec![],
             links: Some(vec![Uuid::new_v4()]),
@@ -622,6 +640,7 @@ mod tests {
         
         let create_request = CreateCardRequest {
             zettel_id: "DB-TEST-003".to_string(),
+            title: Some("Due Card Title".to_string()),
             content: "Due card".to_string(),
             topic_ids: vec![],
             links: None,
@@ -642,6 +661,7 @@ mod tests {
         // Create two cards
         let card_a = db.create_card(CreateCardRequest {
             zettel_id: "BACKLINK-TEST-A".to_string(),
+            title: Some("Card A Title".to_string()),
             content: "Card A".to_string(),
             topic_ids: vec![],
             links: None,
@@ -649,6 +669,7 @@ mod tests {
         
         let card_b = db.create_card(CreateCardRequest {
             zettel_id: "BACKLINK-TEST-B".to_string(),
+            title: Some("Card B Title".to_string()),
             content: "Card B".to_string(),
             topic_ids: vec![],
             links: None,
@@ -681,6 +702,7 @@ mod tests {
         // Create three cards
         let card_a = db.create_card(CreateCardRequest {
             zettel_id: "MULTI-BACKLINK-A".to_string(),
+            title: Some("Multi Card A".to_string()),
             content: "Card A".to_string(),
             topic_ids: vec![],
             links: None,
@@ -688,6 +710,7 @@ mod tests {
         
         let card_b = db.create_card(CreateCardRequest {
             zettel_id: "MULTI-BACKLINK-B".to_string(),
+            title: Some("Multi Card B".to_string()),
             content: "Card B".to_string(),
             topic_ids: vec![],
             links: None,
@@ -695,6 +718,7 @@ mod tests {
         
         let card_c = db.create_card(CreateCardRequest {
             zettel_id: "MULTI-BACKLINK-C".to_string(),
+            title: Some("Multi Card C".to_string()),
             content: "Card C".to_string(),
             topic_ids: vec![],
             links: None,
@@ -731,6 +755,7 @@ mod tests {
         // Create two cards
         let card_a = db.create_card(CreateCardRequest {
             zettel_id: "CASCADE-TEST-A".to_string(),
+            title: Some("Cascade Card A".to_string()),
             content: "Card A".to_string(),
             topic_ids: vec![],
             links: None,
@@ -738,6 +763,7 @@ mod tests {
         
         let card_b = db.create_card(CreateCardRequest {
             zettel_id: "CASCADE-TEST-B".to_string(),
+            title: Some("Cascade Card B".to_string()),
             content: "Card B".to_string(),
             topic_ids: vec![],
             links: None,

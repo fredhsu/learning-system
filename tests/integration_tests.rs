@@ -8,6 +8,7 @@ async fn test_card_creation_and_retrieval() {
 
     let create_request = CreateCardRequest {
         zettel_id: "TEST-001".to_string(),
+        title: Some("Test Card".to_string()),
         content: "Test card content with LaTeX: $x^2 + y^2 = z^2$".to_string(),
         topic_ids: vec![],
         links: None,
@@ -36,6 +37,7 @@ async fn test_fsrs_scheduling() {
 
     let create_request = CreateCardRequest {
         zettel_id: "TEST-002".to_string(),
+        title: None,
         content: "FSRS test card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -82,6 +84,7 @@ async fn test_review_workflow() {
 
     let create_request = CreateCardRequest {
         zettel_id: "TEST-003".to_string(),
+        title: None,
         content: "Review test card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -112,6 +115,7 @@ async fn test_card_update() {
 
     let create_request = CreateCardRequest {
         zettel_id: "UPDATE-001".to_string(),
+        title: None,
         content: "Original content".to_string(),
         topic_ids: vec![],
         links: None,
@@ -124,6 +128,7 @@ async fn test_card_update() {
     // Test updating content
     let update_request = UpdateCardRequest {
         zettel_id: Some("UPDATE-002".to_string()),
+        title: None,
         content: Some("Updated content".to_string()),
         topic_ids: None,
         links: Some(vec![Uuid::new_v4()]),
@@ -152,6 +157,7 @@ async fn test_card_update_nonexistent() {
     let fake_id = Uuid::new_v4();
     let update_request = UpdateCardRequest {
         zettel_id: Some("UPDATE-003".to_string()),
+        title: None,
         content: Some("This should fail".to_string()),
         topic_ids: None,
         links: None,
@@ -168,6 +174,7 @@ async fn test_card_deletion() {
 
     let create_request = CreateCardRequest {
         zettel_id: "DELETE-001".to_string(),
+        title: None,
         content: "Card to be deleted".to_string(),
         topic_ids: vec![],
         links: None,
@@ -208,6 +215,7 @@ async fn test_database_card_operations() {
 
     let create_request = CreateCardRequest {
         zettel_id: "DB-001".to_string(),
+        title: None,
         content: "Direct database test".to_string(),
         topic_ids: vec![],
         links: Some(vec![Uuid::new_v4()]),
@@ -251,6 +259,7 @@ async fn test_card_links_functionality() {
     // Create first card
     let card1 = card_service.create_card(CreateCardRequest {
         zettel_id: "LINK-001".to_string(),
+        title: None,
         content: "Card 1".to_string(),
         topic_ids: vec![],
         links: None,
@@ -259,6 +268,7 @@ async fn test_card_links_functionality() {
     // Create second card
     let card2 = card_service.create_card(CreateCardRequest {
         zettel_id: "LINK-002".to_string(),
+        title: None,
         content: "Card 2".to_string(),
         topic_ids: vec![],
         links: None,
@@ -267,6 +277,7 @@ async fn test_card_links_functionality() {
     // Update first card to link to second card
     let update_request = UpdateCardRequest {
         zettel_id: Some("LINK-003".to_string()),
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card2.id]),
@@ -292,6 +303,7 @@ async fn test_multiple_card_operations() {
     for i in 1..=5 {
         let create_request = CreateCardRequest {
             zettel_id: format!("MULTI-{:03}", i),
+            title: None,
             content: format!("Test card {}", i),
             topic_ids: vec![],
             links: None,
@@ -309,6 +321,7 @@ async fn test_multiple_card_operations() {
         if i % 2 == 0 {
             let update_request = UpdateCardRequest {
                 zettel_id: Some(format!("MULTI-UPDATE-{:03}", i + 1)),
+                title: None,
                 content: Some(format!("Updated test card {}", i + 1)),
                 topic_ids: None,
                 links: None,
@@ -357,6 +370,7 @@ async fn test_search_functionality() {
     for (content, _topics) in &cards_data {
         let create_request = CreateCardRequest {
             zettel_id: format!("SEARCH-{:03}", created_card_ids.len() + 1),
+            title: None,
             content: content.to_string(),
             topic_ids: vec![],
             links: None,
@@ -395,6 +409,7 @@ async fn test_error_handling_edge_cases() {
     // Test updating with empty content
     let card = card_service.create_card(CreateCardRequest {
         zettel_id: "EDGE-001".to_string(),
+        title: None,
         content: "Original".to_string(),
         topic_ids: vec![],
         links: None,
@@ -402,6 +417,7 @@ async fn test_error_handling_edge_cases() {
 
     let update_request = UpdateCardRequest {
         zettel_id: Some("EDGE-002".to_string()),
+        title: None,
         content: Some("".to_string()),
         topic_ids: None,
         links: None,
@@ -415,6 +431,7 @@ async fn test_error_handling_edge_cases() {
     let long_content = "a".repeat(10000);
     let update_request = UpdateCardRequest {
         zettel_id: Some("EDGE-003".to_string()),
+        title: None,
         content: Some(long_content.clone()),
         topic_ids: None,
         links: None,
@@ -435,6 +452,7 @@ async fn test_ui_preview_functionality() {
     
     let create_request = CreateCardRequest {
         zettel_id: "UI-PREVIEW-001".to_string(),
+        title: None,
         content: long_content.clone(),
         topic_ids: vec![],
         links: None,
@@ -454,7 +472,7 @@ async fn test_ui_preview_functionality() {
 async fn test_keyboard_shortcut_ratings() {
     use learning_system::FSRSScheduler;
     
-    let scheduler = FSRSScheduler::new();
+    let _scheduler = FSRSScheduler::new();
     
     // Test that all keyboard shortcut ratings (1-4) work correctly
     let rating_mappings = vec![
@@ -486,6 +504,7 @@ async fn test_backlinks_creation() {
     // Create three cards
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "BACKLINK-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         links: None,
@@ -493,6 +512,7 @@ async fn test_backlinks_creation() {
 
     let card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "BACKLINK-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         links: None,
@@ -500,6 +520,7 @@ async fn test_backlinks_creation() {
 
     let card_c = card_service.create_card(CreateCardRequest {
         zettel_id: "BACKLINK-C".to_string(),
+        title: None,
         content: "Card C".to_string(),
         topic_ids: vec![],
         links: None,
@@ -508,6 +529,7 @@ async fn test_backlinks_creation() {
     // Link card A to cards B and C
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_b.id, card_c.id]),
@@ -545,6 +567,7 @@ async fn test_backlinks_update_and_removal() {
     // Create three cards
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "BACKLINK-UPDATE-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         links: None,
@@ -552,6 +575,7 @@ async fn test_backlinks_update_and_removal() {
 
     let card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "BACKLINK-UPDATE-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         links: None,
@@ -559,6 +583,7 @@ async fn test_backlinks_update_and_removal() {
 
     let card_c = card_service.create_card(CreateCardRequest {
         zettel_id: "BACKLINK-UPDATE-C".to_string(),
+        title: None,
         content: "Card C".to_string(),
         topic_ids: vec![],
         links: None,
@@ -567,6 +592,7 @@ async fn test_backlinks_update_and_removal() {
     // Initially link A to B
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_b.id]),
@@ -581,6 +607,7 @@ async fn test_backlinks_update_and_removal() {
     // Update A to link to C instead of B
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_c.id]),
@@ -598,6 +625,7 @@ async fn test_backlinks_update_and_removal() {
     // Remove all links from A
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![]),
@@ -617,6 +645,7 @@ async fn test_backlinks_bidirectional_linking() {
     // Create two cards
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "BIDIR-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         links: None,
@@ -624,6 +653,7 @@ async fn test_backlinks_bidirectional_linking() {
 
     let card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "BIDIR-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         links: None,
@@ -632,6 +662,7 @@ async fn test_backlinks_bidirectional_linking() {
     // Link A to B
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_b.id]),
@@ -641,6 +672,7 @@ async fn test_backlinks_bidirectional_linking() {
     // Link B to A
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_a.id]),
@@ -673,6 +705,7 @@ async fn test_backlinks_card_deletion() {
     // Create two cards
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "DELETE-BACKLINK-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         links: None,
@@ -680,6 +713,7 @@ async fn test_backlinks_card_deletion() {
 
     let card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "DELETE-BACKLINK-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         links: None,
@@ -688,6 +722,7 @@ async fn test_backlinks_card_deletion() {
     // Link A to B
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_b.id]),
@@ -720,6 +755,7 @@ async fn test_backlinks_multiple_sources() {
     // Create four cards
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "MULTI-SOURCE-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         links: None,
@@ -727,6 +763,7 @@ async fn test_backlinks_multiple_sources() {
 
     let card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "MULTI-SOURCE-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         links: None,
@@ -734,6 +771,7 @@ async fn test_backlinks_multiple_sources() {
 
     let card_c = card_service.create_card(CreateCardRequest {
         zettel_id: "MULTI-SOURCE-C".to_string(),
+        title: None,
         content: "Card C".to_string(),
         topic_ids: vec![],
         links: None,
@@ -741,6 +779,7 @@ async fn test_backlinks_multiple_sources() {
 
     let card_d = card_service.create_card(CreateCardRequest {
         zettel_id: "MULTI-SOURCE-D".to_string(),
+        title: None,
         content: "Card D".to_string(),
         topic_ids: vec![],
         links: None,
@@ -750,6 +789,7 @@ async fn test_backlinks_multiple_sources() {
     for (source_card, source_name) in [(card_a.id, "A"), (card_b.id, "B"), (card_c.id, "C")] {
         let update_request = UpdateCardRequest {
             zettel_id: None,
+            title: None,
             content: None,
             topic_ids: None,
             links: Some(vec![card_d.id]),
@@ -774,6 +814,7 @@ async fn test_backlinks_multiple_sources() {
     // Remove link from B to D
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![]),
@@ -798,6 +839,7 @@ async fn test_backlinks_with_zettel_linking() {
     // Create cards using zettel linking functionality
     let card_a = card_service.create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
         zettel_id: "ZETTEL-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         zettel_links: None,
@@ -805,6 +847,7 @@ async fn test_backlinks_with_zettel_linking() {
 
     let card_b = card_service.create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
         zettel_id: "ZETTEL-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         zettel_links: None,
@@ -813,6 +856,7 @@ async fn test_backlinks_with_zettel_linking() {
     // Link A to B using zettel IDs
     let update_request = UpdateCardWithZettelLinksRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         zettel_links: Some(vec!["ZETTEL-B".to_string()]),
@@ -838,14 +882,16 @@ async fn test_zettel_id_change_with_references() {
     // Create a card with original Zettel ID
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "ORIGINAL-ID".to_string(),
+        title: None,
         content: "This is the original card".to_string(),
         topic_ids: vec![],
         links: None,
     }).await.unwrap();
 
     // Create another card that references the first card in its content
-    let card_b = card_service.create_card(CreateCardRequest {
+    let _card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "REFERENCING-CARD".to_string(),
+        title: None,
         content: "This card references ORIGINAL-ID in its text content".to_string(),
         topic_ids: vec![],
         links: None,
@@ -854,12 +900,14 @@ async fn test_zettel_id_change_with_references() {
     // Create a third card that links to card A by UUID
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_a.id]),
     };
     let card_c = card_service.create_card(CreateCardRequest {
         zettel_id: "LINKING-CARD".to_string(),
+        title: None,
         content: "This card has a UUID link to the original card".to_string(),
         topic_ids: vec![],
         links: None,
@@ -874,6 +922,7 @@ async fn test_zettel_id_change_with_references() {
     // Change the Zettel ID of card A
     let update_request = UpdateCardRequest {
         zettel_id: Some("NEW-ID".to_string()),
+        title: None,
         content: None,
         topic_ids: None,
         links: None,
@@ -911,13 +960,15 @@ async fn test_zettel_id_duplicate_prevention() {
     // Create two cards with different Zettel IDs
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "CARD-A".to_string(),
+        title: None,
         content: "Card A".to_string(),
         topic_ids: vec![],
         links: None,
     }).await.unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
+    let _card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "CARD-B".to_string(),
+        title: None,
         content: "Card B".to_string(),
         topic_ids: vec![],
         links: None,
@@ -926,6 +977,7 @@ async fn test_zettel_id_duplicate_prevention() {
     // Try to change card A's Zettel ID to card B's Zettel ID (should fail)
     let update_request = UpdateCardRequest {
         zettel_id: Some("CARD-B".to_string()),
+        title: None,
         content: None,
         topic_ids: None,
         links: None,
@@ -948,6 +1000,7 @@ async fn test_zettel_id_change_preserves_all_relationships() {
     // Create a complex linking scenario
     let card_a = card_service.create_card(CreateCardRequest {
         zettel_id: "CENTRAL-CARD".to_string(),
+        title: None,
         content: "Central card with many relationships".to_string(),
         topic_ids: vec![],
         links: None,
@@ -955,6 +1008,7 @@ async fn test_zettel_id_change_preserves_all_relationships() {
 
     let card_b = card_service.create_card(CreateCardRequest {
         zettel_id: "LINKED-CARD-1".to_string(),
+        title: None,
         content: "Card 1".to_string(),
         topic_ids: vec![],
         links: None,
@@ -962,6 +1016,7 @@ async fn test_zettel_id_change_preserves_all_relationships() {
 
     let card_c = card_service.create_card(CreateCardRequest {
         zettel_id: "LINKED-CARD-2".to_string(),
+        title: None,
         content: "Card 2".to_string(),
         topic_ids: vec![],
         links: None,
@@ -971,6 +1026,7 @@ async fn test_zettel_id_change_preserves_all_relationships() {
     // A links to B and C
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_b.id, card_c.id]),
@@ -980,6 +1036,7 @@ async fn test_zettel_id_change_preserves_all_relationships() {
     // B links to A  
     let update_request = UpdateCardRequest {
         zettel_id: None,
+        title: None,
         content: None,
         topic_ids: None,
         links: Some(vec![card_a.id]),
@@ -999,6 +1056,7 @@ async fn test_zettel_id_change_preserves_all_relationships() {
     // Change the Zettel ID of the central card
     let update_request = UpdateCardRequest {
         zettel_id: Some("NEW-CENTRAL-CARD".to_string()),
+        title: None,
         content: None,
         topic_ids: None,
         links: None,

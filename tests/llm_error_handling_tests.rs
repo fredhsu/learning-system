@@ -6,6 +6,7 @@ fn create_test_card() -> Card {
     Card {
         id: Uuid::new_v4(),
         zettel_id: "ERROR-TEST-001".to_string(),
+        title: None,
         content: "Test card for error handling validation. This tests how the system handles various error conditions with different LLM providers.".to_string(),
         creation_date: Utc::now(),
         last_reviewed: None,
@@ -20,6 +21,7 @@ fn create_test_card() -> Card {
     }
 }
 
+#[allow(dead_code)]
 fn create_test_question() -> QuizQuestion {
     QuizQuestion {
         question: "What is the primary benefit of error handling in software systems?".to_string(),

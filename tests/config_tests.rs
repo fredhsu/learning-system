@@ -64,7 +64,7 @@ fn test_environment_variable_scenarios() {
     
     struct EnvTestCase {
         llm_provider: Option<&'static str>,
-        llm_model: Option<&'static str>,
+        _llm_model: Option<&'static str>,
         expected_provider: LLMProvider,
         description: &'static str,
     }
@@ -72,25 +72,25 @@ fn test_environment_variable_scenarios() {
     let test_cases = vec![
         EnvTestCase {
             llm_provider: None,
-            llm_model: None,
+            _llm_model: None,
             expected_provider: LLMProvider::OpenAI, // default
             description: "No environment variables set"
         },
         EnvTestCase {
             llm_provider: Some("gemini"),
-            llm_model: Some("gemini-2.0-flash-exp"),
+            _llm_model: Some("gemini-2.0-flash-exp"),
             expected_provider: LLMProvider::Gemini,
             description: "Gemini with specific model"
         },
         EnvTestCase {
             llm_provider: Some("openai"),
-            llm_model: Some("gpt-4o-mini"),
+            _llm_model: Some("gpt-4o-mini"),
             expected_provider: LLMProvider::OpenAI,
             description: "OpenAI with specific model"
         },
         EnvTestCase {
             llm_provider: Some("gemini"),
-            llm_model: None,
+            _llm_model: None,
             expected_provider: LLMProvider::Gemini,
             description: "Gemini with default model"
         },

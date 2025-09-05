@@ -13,7 +13,7 @@ This is a knowledge management and spaced repetition learning platform built in 
 - **Quiz System**: LLM-generated questions with automated grading
 - **Frontend**: Modern responsive web UI with comprehensive UX improvements
 
-### UI/UX Features (Phase 2 Complete)
+### UI/UX Features (Phase 4 In Progress)
 - **Visual Hierarchy**: Icon-based navigation with Feather Icons, consistent typography scale, and design system
 - **Interactive Elements**: Keyboard shortcuts (Space, 1-4 for ratings, ? for help), enhanced loading states, toast notifications
 - **Search & Discovery**: Real-time search with highlighting, case-insensitive matching, 300ms debouncing
@@ -21,6 +21,8 @@ This is a knowledge management and spaced repetition learning platform built in 
 - **Responsive Design**: Mobile-first approach, touch-friendly interfaces, optimized for all screen sizes
 - **Progress Tracking**: Visual progress bars, session statistics, completion celebrations
 - **Accessibility**: High contrast support, reduced motion preferences, semantic HTML structure
+- **Card Headers**: Enhanced Zettel ID badges with gradient styling, improved title typography, compact metadata row
+- **Visual Link Indicators**: Wiki-style links with Feather icons, hover effects, and clickable navigation
 
 ### Database Design
 - **cards**: Core knowledge units with wiki-style links
@@ -63,6 +65,13 @@ cargo clippy         # Linting
 cargo fmt            # Code formatting
 ```
 
+### Card Title Migration
+```bash
+# One-time migration to extract titles from existing markdown headers
+cargo run --bin migrate_titles -- --dry-run  # Preview changes
+cargo run --bin migrate_titles                # Apply migration
+```
+
 ## Key Development Considerations
 
 ### FSRS Integration
@@ -84,6 +93,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - SQLite is used for simplicity and portability
 - FSRS statistics are updated once per card after all questions are completed (prevents multiple overwrites)
 - Card content supports LaTeX/MathJax markup for mathematical expressions (both inline `$...$` and display `$$...$$`)
+- Cards support optional titles extracted from markdown headers or manually entered
 - Search functionality uses case-insensitive LIKE queries for content matching
 - Backlinks maintain referential integrity through CASCADE DELETE foreign key constraints
 
@@ -93,9 +103,10 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **State Management**: JavaScript-based with real-time search debouncing and progress tracking
 - **Icon System**: Feather Icons with SVG sprites for scalable, accessible iconography
 - **Responsive Strategy**: Mobile-first CSS with progressive enhancement for larger screens
+- **Review Interface**: Collapsible card display showing titles by default with expandable content sections, batch question display with simultaneous answering
 
 ## Project Status
-**Phase 3 Complete**: Quiz efficiency optimizations successfully implemented alongside modern UI/UX enhancements. The system now features state-of-the-art performance optimizations with:
+**Phase 4 In Progress**: Advanced UI enhancements building on completed efficiency optimizations. Card Header Enhancement completed with modern Zettel ID badges and improved visual hierarchy. Remaining Phase 4 features include linking system visibility, information architecture improvements, and enhanced link experience.
 
 ### ✅ Completed Features
 - **Navigation**: Icon-enhanced navigation with Feather Icons (layers, refresh-cw, tag icons)
@@ -103,7 +114,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Cards**: Preview system for long content with expand/collapse functionality
 - **Linking**: Bidirectional backlinks with automatic maintenance and distinct visual styling
 - **Math Rendering**: Full LaTeX support with inline `$...$` and display `$$...$$` math
-- **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), completion celebrations, suggested rating display, and aggregated FSRS updates
+- **Reviews**: Progress tracking, keyboard shortcuts (Space, 1-4), completion celebrations, suggested rating display, aggregated FSRS updates, and batch question display
 - **Responsive**: Mobile-first design with touch-friendly interactions
 - **Feedback**: Toast notifications, skeleton loading, and enhanced error handling
 - **Accessibility**: High contrast mode, reduced motion, semantic HTML
@@ -112,6 +123,9 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Performance Monitoring**: Comprehensive structured logging and error tracking
 - **Centralized Logging**: File-based logging with daily rotation in `logs/learning-system.log.YYYY-MM-DD`
 - **Session Answer Submission**: Context-aware grading for multiple choice questions with proper question context and suggested rating display
+- **Card Headers (Phase 4)**: Enhanced Zettel ID badges with gradient styling, improved title typography, compact metadata row with icons
+- **Visual Link Indicators (Phase 4)**: Wiki-style links enhanced with Feather link icons, modern styling, hover effects, and navigation functionality
+- **Batch Question Interface**: All questions for a card displayed simultaneously with batch submission, comprehensive results display, and performance-based suggested ratings
 
 ### API Enhancements
 - **Search Endpoint**: `/api/cards/search?q={query}` with URL encoding support
@@ -134,10 +148,13 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Session Answer Tests**: Context-aware answer submission and multiple choice grading validation with suggested rating display
 - **Suggested Rating Tests**: UI response format validation for suggested rating display functionality
 - **FSRS Integration Tests**: Single update per card validation, rating aggregation, and deferred update functionality
+- **Batch Interface Tests**: Simultaneous question display, answer validation, batch submission, and comprehensive result display
 
 ### Development Notes
 - All Phase 2 UI/UX improvements from UI_IMPROVEMENTS.md completed
 - All Phase 3 efficiency optimizations from QUIZ_EFFICIENCY_IMPROVEMENTS.md completed
+- Phase 4 Card Header Enhancement from UI_IMPROVEMENTS_PHASE_4.md completed
+- Phase 4 Visual Link Indicators from UI_IMPROVEMENTS_PHASE_4.md completed
 - Bidirectional backlinks system fully implemented and tested
 - LaTeX rendering supports both inline and display math expressions
 - Batch processing infrastructure with robust fallback mechanisms
@@ -148,7 +165,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - Legacy endpoint cleanup removes unused and problematic API routes
 - Design system provides consistent foundation for future development
 - Mobile-first responsive approach supports modern device usage patterns
-- 114 total tests covering all functionality including FSRS integration and rating aggregation
+- 114 total tests covering all functionality including FSRS integration, rating aggregation, and batch question interface
 
 ### Performance Achievements
 - **API Call Reduction**: 85-90% fewer calls per review session (from ~15-20 to 1-2 calls)
@@ -158,5 +175,6 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **FSRS Optimization**: Single database update per card with aggregated ratings (prevents overwrite issues)
 - **Monitoring**: Comprehensive structured logging for performance visibility
 
-**Latest Update**: FSRS multiple updates fix implemented - system now collects all question ratings and performs single aggregated FSRS update per card, preventing overwrite issues and providing more accurate spaced repetition scheduling
-**Next Phase**: Ready for Phase 4 advanced features (session persistence, dark mode, advanced study statistics)
+**Latest Update**: Batch Question Interface completed - all questions for a card now display simultaneously with batch submission, comprehensive scoring, and performance-based suggested ratings. This significantly improves review efficiency and user experience.
+**Current Phase**: Phase 4 UI enhancements in progress (link preview cards, collapsible sections, visual hierarchy improvements)
+- The newest models for GPT are gpt-5 and gpt-5-mini

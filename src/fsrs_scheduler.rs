@@ -42,6 +42,7 @@ impl FSRSScheduler {
         let updated_card = Card {
             id: card.id,
             zettel_id: card.zettel_id.clone(),
+            title: card.title.clone(),
             content: card.content.clone(),
             creation_date: card.creation_date,
             last_reviewed: Some(now),
@@ -154,6 +155,7 @@ mod tests {
         Card {
             id: Uuid::new_v4(),
             zettel_id: "TEST001".to_string(),
+            title: None,
             content: "Test card".to_string(),
             creation_date: Utc::now(),
             last_reviewed: None,
