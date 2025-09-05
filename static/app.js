@@ -16,18 +16,42 @@ class LearningSystem {
             sessionId: null,
             questions: {}
         };
+        this.cardCache = new Map(); // Cache for link preview data
+        this.previewTimeouts = new Map(); // Track delayed loading states
         this.init();
     }
 
+    processWikiLinks(content) {
+        // Process wiki-style links [[Link Text]] into styled HTML with preview functionality
+        return content.replace(/\[\[([^\]]+)\]\]/g, (match, linkText) => {
+            const trimmedText = linkText.trim();
+            const uniqueId = `link-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            
+            return `<a href="#" class="wiki-link" id="${uniqueId}" 
+                       onclick="app.handleWikiLinkClick('${trimmedText}'); return false;"
+                       onmouseenter="app.showLinkPreview('${uniqueId}', '${trimmedText}')"
+                       onmouseleave="app.hideLinkPreview('${uniqueId}')"
+                       ontouchstart="app.handleLinkTouch('${uniqueId}', '${trimmedText}')"
+                       ontouchend="app.handleLinkTouchEnd('${uniqueId}')">
+                <i data-feather="link" class="wiki-link-icon"></i>
+                <span>${trimmedText}</span>
+            </a>`;
+        });
+    }
+
     renderMarkdown(content) {
+        // First process wiki links, then markdown
+        const processedContent = this.processWikiLinks(content);
         if (typeof marked !== 'undefined') {
-            return marked.parse(content);
+            return marked.parse(processedContent);
         }
-        return content.replace(/\n/g, '<br>');
+        return processedContent.replace(/\n/g, '<br>');
     }
 
     createPreviewContent(content) {
-        const plainTextContent = content.replace(/[#*_`~\[\]()]/g, '').substring(0, 100);
+        // Process wiki links first, then create preview
+        const linkedContent = this.processWikiLinks(content);
+        const plainTextContent = linkedContent.replace(/[#*_`~]/g, '').substring(0, 100);
         if (typeof marked !== 'undefined') {
             return marked.parse(plainTextContent);
         }
@@ -63,6 +87,33 @@ class LearningSystem {
         if (window.MathJax) {
             const activeElement = isCurrentlyPreview ? fullElement : previewElement;
             MathJax.typesetPromise([activeElement]).catch((err) => console.log(err.message));
+        }
+    }
+
+    toggleReviewCardContent() {
+        const contentElement = document.getElementById('review-card-content');
+        const indicator = document.getElementById('expand-indicator');
+        const title = document.getElementById('review-card-title');
+        
+        if (!contentElement || !indicator) return;
+        
+        const isExpanded = contentElement.style.display !== 'none';
+        
+        if (isExpanded) {
+            // Collapse content
+            contentElement.style.display = 'none';
+            indicator.textContent = '▼';
+            title.classList.remove('expanded');
+        } else {
+            // Expand content
+            contentElement.style.display = 'block';
+            indicator.textContent = '▲';
+            title.classList.add('expanded');
+            
+            // Re-render MathJax if available
+            if (window.MathJax) {
+                MathJax.typesetPromise([contentElement]).catch((err) => console.log(err.message));
+            }
         }
     }
 
@@ -352,6 +403,14 @@ class LearningSystem {
     renderCards(cards, searchQuery = '') {
         const container = document.getElementById('cards-list');
         
+        // Populate cache with loaded cards for instant link previews
+        cards.forEach(card => {
+            if (card.title) {
+                const cacheKey = card.title.toLowerCase();
+                this.cardCache.set(cacheKey, card);
+            }
+        });
+        
         if (cards.length === 0) {
             const emptyMessage = searchQuery.trim() 
                 ? `<h3>No cards found</h3><p>No cards match your search for "${searchQuery}"</p>`
@@ -375,6 +434,42 @@ class LearningSystem {
                 <div class="card" data-id="${card.id}">
                     <div class="card-header">
                         <span class="zettel-id">${card.zettel_id}</span>
+                        ${card.title ? `<h4 class="card-title">${card.title}</h4>` : ''}
+                        <div class="card-header-meta">
+                            <div class="card-header-meta-item">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                    <line x1="16" y1="2" x2="16" y2="6"/>
+                                    <line x1="8" y1="2" x2="8" y2="6"/>
+                                    <line x1="3" y1="10" x2="21" y2="10"/>
+                                </svg>
+                                <span class="card-header-meta-value">${new Date(card.creation_date).toLocaleDateString()}</span>
+                            </div>
+                            <div class="card-header-meta-item">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 11H5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-4"/>
+                                    <path d="M9 7l3-3 3 3"/>
+                                    <path d="M12 4v8"/>
+                                </svg>
+                                <span class="card-header-meta-value">${card.reps} review${card.reps !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="card-header-meta-item">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+                                </svg>
+                                <span class="card-header-meta-value">${card.state}</span>
+                            </div>
+                            ${card.next_review ? `
+                                <div class="card-header-meta-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12,6 12,12 16,14"/>
+                                    </svg>
+                                    <span class="card-header-meta-value">Next: ${new Date(card.next_review).toLocaleDateString()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
                     <div class="card-content-wrapper">
                         ${needsPreview ? `
@@ -392,45 +487,6 @@ class LearningSystem {
                         ` : `
                             <div class="card-content">${fullContent}</div>
                         `}
-                    </div>
-                    <div class="card-meta">
-                        <div class="card-meta-item created">
-                            <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                                <line x1="16" y1="2" x2="16" y2="6"/>
-                                <line x1="8" y1="2" x2="8" y2="6"/>
-                                <line x1="3" y1="10" x2="21" y2="10"/>
-                            </svg>
-                            <span class="card-meta-label">Created</span>
-                            <span class="card-meta-value">${new Date(card.creation_date).toLocaleDateString()}</span>
-                        </div>
-                        <div class="card-meta-item reviews">
-                            <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M9 11H5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-4"/>
-                                <path d="M9 7l3-3 3 3"/>
-                                <path d="M12 4v8"/>
-                            </svg>
-                            <span class="card-meta-label">Reviews</span>
-                            <span class="card-meta-value">${card.reps}</span>
-                        </div>
-                        <div class="card-meta-item state ${card.state.toLowerCase()}">
-                            <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
-                            </svg>
-                            <span class="card-meta-label">State</span>
-                            <span class="card-meta-value">${card.state}</span>
-                        </div>
-                        ${card.next_review ? `
-                            <div class="card-meta-item next-review">
-                                <svg class="card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <polyline points="12,6 12,12 16,14"/>
-                                </svg>
-                                <span class="card-meta-label">Next</span>
-                                <span class="card-meta-value">${new Date(card.next_review).toLocaleDateString()}</span>
-                            </div>
-                        ` : ''}
                     </div>
                     <div class="card-links-section" id="card-links-${card.id}">
                         <!-- Linked cards will be loaded here -->
@@ -486,17 +542,26 @@ class LearningSystem {
         
         // Render forward links
         if (linkedCards.length > 0) {
+            const isLinkedCardsCollapsed = this.getLinkSectionPreference('linked-cards');
+            const linkedCardsIcon = isLinkedCardsCollapsed ? '▶' : '▼';
+            const linkedCardsHeaderClass = isLinkedCardsCollapsed ? 'linked-cards-header collapsed' : 'linked-cards-header';
+            const linkedCardsListClass = isLinkedCardsCollapsed ? 'linked-cards-list collapsed' : 'linked-cards-list';
+            
             linksHtml += `
                 <div class="linked-cards">
-                    <div class="linked-cards-header">
-                        <i data-feather="link"></i>
-                        <span>Linked Cards (${linkedCards.length})</span>
+                    <div class="${linkedCardsHeaderClass}" onclick="app.toggleLinkSection('linked-cards', '${cardId}')">
+                        <div class="section-header-left">
+                            <i data-feather="link"></i>
+                            <span>Linked Cards</span>
+                            <div class="section-count-badge">${linkedCards.length}</div>
+                        </div>
+                        <span class="section-toggle-icon">${linkedCardsIcon}</span>
                     </div>
-                    <div class="linked-cards-list">
+                    <div class="${linkedCardsListClass}" id="linked-cards-list-${cardId}">
                         ${linkedCards.map(linkedCard => `
                             <a href="#" class="linked-card-item" onclick="app.navigateToCard('${linkedCard.id}'); return false;">
                                 <span class="linked-card-zettel">${linkedCard.zettel_id}</span>
-                                <span class="linked-card-preview">${this.truncateText(linkedCard.content, 80)}</span>
+                                <span class="linked-card-preview">${linkedCard.title || this.truncateText(linkedCard.content, 60)}</span>
                             </a>
                         `).join('')}
                     </div>
@@ -506,17 +571,26 @@ class LearningSystem {
 
         // Render backlinks
         if (backlinks.length > 0) {
+            const isBacklinksCollapsed = this.getLinkSectionPreference('backlinks');
+            const backlinksIcon = isBacklinksCollapsed ? '▶' : '▼';
+            const backlinksHeaderClass = isBacklinksCollapsed ? 'backlinks-header collapsed' : 'backlinks-header';
+            const backlinksListClass = isBacklinksCollapsed ? 'backlinks-list collapsed' : 'backlinks-list';
+            
             linksHtml += `
                 <div class="backlinks">
-                    <div class="backlinks-header">
-                        <i data-feather="corner-down-left"></i>
-                        <span>Backlinks (${backlinks.length})</span>
+                    <div class="${backlinksHeaderClass}" onclick="app.toggleLinkSection('backlinks', '${cardId}')">
+                        <div class="section-header-left">
+                            <i data-feather="corner-down-left"></i>
+                            <span>Backlinks</span>
+                            <div class="section-count-badge">${backlinks.length}</div>
+                        </div>
+                        <span class="section-toggle-icon">${backlinksIcon}</span>
                     </div>
-                    <div class="backlinks-list">
+                    <div class="${backlinksListClass}" id="backlinks-list-${cardId}">
                         ${backlinks.map(backlinkCard => `
                             <a href="#" class="backlink-item" onclick="app.navigateToCard('${backlinkCard.id}'); return false;">
                                 <span class="backlink-zettel">${backlinkCard.zettel_id}</span>
-                                <span class="backlink-preview">${this.truncateText(backlinkCard.content, 80)}</span>
+                                <span class="backlink-preview">${backlinkCard.title || this.truncateText(backlinkCard.content, 60)}</span>
                             </a>
                         `).join('')}
                     </div>
@@ -549,6 +623,36 @@ class LearningSystem {
                 cardElement.classList.remove('highlighted');
             }, 2000);
         }
+    }
+
+    toggleLinkSection(sectionType, cardId) {
+        const header = document.querySelector(`[onclick*="toggleLinkSection('${sectionType}', '${cardId}')"]`);
+        const list = document.getElementById(`${sectionType}-list-${cardId}`);
+        const toggleIcon = header.querySelector('.section-toggle-icon');
+        
+        if (!header || !list || !toggleIcon) return;
+
+        const isCollapsed = list.classList.contains('collapsed');
+        const prefKey = `linkSection_${sectionType}_collapsed`;
+
+        if (isCollapsed) {
+            // Expand
+            list.classList.remove('collapsed');
+            header.classList.remove('collapsed');
+            toggleIcon.textContent = '▼';
+            localStorage.setItem(prefKey, 'false');
+        } else {
+            // Collapse
+            list.classList.add('collapsed');
+            header.classList.add('collapsed');
+            toggleIcon.textContent = '▶';
+            localStorage.setItem(prefKey, 'true');
+        }
+    }
+
+    getLinkSectionPreference(sectionType) {
+        const prefKey = `linkSection_${sectionType}_collapsed`;
+        return localStorage.getItem(prefKey) === 'true';
     }
 
     async loadTopics() {
@@ -585,6 +689,7 @@ class LearningSystem {
         e.preventDefault();
         
         const zettelId = document.getElementById('card-zettel-id').value.trim();
+        const title = document.getElementById('card-title').value.trim();
         const content = document.getElementById('card-content').value;
         const topicsText = document.getElementById('card-topics').value;
         const linksText = document.getElementById('card-links').value;
@@ -600,6 +705,7 @@ class LearningSystem {
 
         const cardData = {
             zettel_id: zettelId,
+            title: title || null,
             content,
             topic_ids,
             zettel_links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
@@ -704,10 +810,20 @@ class LearningSystem {
             const cardDisplay = document.getElementById('card-content-display');
             cardDisplay.classList.add('quiz-transition');
             
+            const cardTitle = card.title || `Card ${card.zettel_id}`;
+            const cardMeta = `Next review: ${new Date(card.next_review).toLocaleDateString()}`;
+            
             cardDisplay.innerHTML = `
-                <h3>Review Card</h3>
-                <div class="card-content">${this.renderMarkdown(card.content)}</div>
-                <p class="card-meta">Next review: ${new Date(card.next_review).toLocaleDateString()}</p>
+                <div class="review-card-header">
+                    <h3 class="review-card-title" id="review-card-title" onclick="app.toggleReviewCardContent()">
+                        ${cardTitle}
+                        <span class="expand-indicator" id="expand-indicator">▼</span>
+                    </h3>
+                    <p class="card-meta">${cardMeta}</p>
+                </div>
+                <div class="review-card-content" id="review-card-content" style="display: none;">
+                    <div class="card-content">${this.renderMarkdown(card.content)}</div>
+                </div>
             `;
 
             // Add MathJax rendering if available
@@ -985,6 +1101,7 @@ class LearningSystem {
             // Populate edit form
             document.getElementById('edit-card-id').value = card.id;
             document.getElementById('edit-card-zettel-id').value = card.zettel_id;
+            document.getElementById('edit-card-title').value = card.title || '';
             document.getElementById('edit-card-content').value = card.content;
             
             // Get linked cards and display their Zettel IDs
@@ -1011,11 +1128,13 @@ class LearningSystem {
         
         const cardId = document.getElementById('edit-card-id').value;
         const zettelId = document.getElementById('edit-card-zettel-id').value.trim();
+        const title = document.getElementById('edit-card-title').value.trim();
         const content = document.getElementById('edit-card-content').value;
         const linksText = document.getElementById('edit-card-links').value;
 
         const updateData = {
             zettel_id: zettelId || null,
+            title: title || null,
             content: content || null,
             zettel_links: linksText ? linksText.split(',').map(l => l.trim()).filter(l => l) : null
         };
@@ -1226,6 +1345,279 @@ class LearningSystem {
         
         // Load new review session
         await this.loadReviewSession();
+    }
+
+    async handleWikiLinkClick(linkText) {
+        // First try to find card by title that matches the link text
+        const cards = await this.apiCall('/cards').catch(() => []);
+        
+        // Look for exact title match first
+        let targetCard = cards.find(card => 
+            card.title && card.title.toLowerCase() === linkText.toLowerCase()
+        );
+        
+        // If no title match, try to find by content containing the link text
+        if (!targetCard) {
+            targetCard = cards.find(card => 
+                card.content.toLowerCase().includes(linkText.toLowerCase())
+            );
+        }
+        
+        // If found, navigate to the card
+        if (targetCard) {
+            this.navigateToCard(targetCard.id);
+        } else {
+            // Show toast notification for missing link target
+            this.showError(`Card "${linkText}" not found`);
+        }
+    }
+
+    async showLinkPreview(linkId, linkText) {
+        const linkElement = document.getElementById(linkId);
+        if (!linkElement) return;
+
+        // Remove any existing preview and timeouts
+        this.hideLinkPreview(linkId);
+
+        // Create preview element
+        const previewElement = document.createElement('div');
+        previewElement.className = 'link-preview';
+        previewElement.id = `preview-${linkId}`;
+        
+        // Position the preview (but keep it invisible initially)
+        document.body.appendChild(previewElement);
+        this.positionLinkPreview(linkElement, previewElement);
+
+        // Set up delayed loading state (only if request takes too long)
+        const loadingTimeout = setTimeout(() => {
+            if (!previewElement.querySelector('.link-preview-header')) {
+                previewElement.innerHTML = `
+                    <div class="link-preview-loading">
+                        <i data-feather="loader" style="width: 16px; height: 16px; animation: spin 1s linear infinite;"></i>
+                        <span>Loading...</span>
+                    </div>
+                `;
+                if (typeof feather !== 'undefined') {
+                    feather.replace();
+                }
+                previewElement.classList.add('visible');
+            }
+        }, 200); // Only show loading after 200ms
+
+        this.previewTimeouts.set(linkId, loadingTimeout);
+
+        try {
+            let targetCard;
+
+            // Check cache first
+            const cacheKey = linkText.toLowerCase();
+            if (this.cardCache.has(cacheKey)) {
+                targetCard = this.cardCache.get(cacheKey);
+            } else {
+                // Try to find in already loaded cards first (from this.allCards)
+                if (this.allCards && this.allCards.length > 0) {
+                    targetCard = this.allCards.find(card => 
+                        card.title && card.title.toLowerCase() === cacheKey
+                    );
+                    
+                    if (!targetCard) {
+                        targetCard = this.allCards.find(card => 
+                            card.content.toLowerCase().includes(cacheKey)
+                        );
+                    }
+                }
+
+                // If not found in loaded cards, fetch from API
+                if (!targetCard) {
+                    const cards = await this.apiCall('/cards');
+                    targetCard = cards.find(card => 
+                        card.title && card.title.toLowerCase() === cacheKey
+                    );
+                    
+                    if (!targetCard) {
+                        targetCard = cards.find(card => 
+                            card.content.toLowerCase().includes(cacheKey)
+                        );
+                    }
+                }
+
+                // Cache the result (even if not found, to avoid repeated lookups)
+                this.cardCache.set(cacheKey, targetCard || null);
+            }
+
+            // Clear the loading timeout since we have data
+            clearTimeout(loadingTimeout);
+            this.previewTimeouts.delete(linkId);
+
+            if (targetCard) {
+                // Show card preview
+                this.renderLinkPreview(previewElement, targetCard);
+            } else {
+                // Show not found message
+                previewElement.innerHTML = `
+                    <div class="link-preview-error">
+                        <i data-feather="alert-circle" class="link-preview-error-icon"></i>
+                        <span>Card "${linkText}" not found</span>
+                    </div>
+                `;
+            }
+
+            // Re-initialize feather icons
+            if (typeof feather !== 'undefined') {
+                feather.replace();
+            }
+
+            // Show the preview with animation
+            previewElement.classList.add('visible');
+
+        } catch (error) {
+            // Clear loading timeout on error
+            clearTimeout(loadingTimeout);
+            this.previewTimeouts.delete(linkId);
+
+            // Show error message
+            previewElement.innerHTML = `
+                <div class="link-preview-error">
+                    <i data-feather="alert-triangle" class="link-preview-error-icon"></i>
+                    <span>Failed to load preview</span>
+                </div>
+            `;
+
+            if (typeof feather !== 'undefined') {
+                feather.replace();
+            }
+
+            previewElement.classList.add('visible');
+        }
+    }
+
+    hideLinkPreview(linkId) {
+        // Clear any pending loading timeout
+        const loadingTimeout = this.previewTimeouts.get(linkId);
+        if (loadingTimeout) {
+            clearTimeout(loadingTimeout);
+            this.previewTimeouts.delete(linkId);
+        }
+
+        const previewElement = document.getElementById(`preview-${linkId}`);
+        if (previewElement) {
+            previewElement.classList.remove('visible');
+            setTimeout(() => {
+                if (previewElement.parentNode) {
+                    previewElement.parentNode.removeChild(previewElement);
+                }
+            }, 200); // Match the CSS transition duration
+        }
+    }
+
+    positionLinkPreview(linkElement, previewElement) {
+        const linkRect = linkElement.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // Start positioning below the link
+        let top = linkRect.bottom + window.scrollY + 8;
+        let left = linkRect.left + window.scrollX;
+        
+        // Adjust if preview would go off screen horizontally
+        const previewWidth = 350; // max-width from CSS
+        if (left + previewWidth > viewportWidth - 20) {
+            left = viewportWidth - previewWidth - 20;
+        }
+        if (left < 20) {
+            left = 20;
+        }
+        
+        // Adjust if preview would go off screen vertically
+        const estimatedPreviewHeight = 200; // estimated height
+        if (top + estimatedPreviewHeight > viewportHeight + window.scrollY - 20) {
+            // Position above the link instead
+            top = linkRect.top + window.scrollY - estimatedPreviewHeight - 8;
+        }
+        
+        previewElement.style.left = `${left}px`;
+        previewElement.style.top = `${top}px`;
+    }
+
+    renderLinkPreview(previewElement, card) {
+        const zettelId = card.zettel_id;
+        const title = card.title || 'Untitled';
+        const content = this.createPreviewContent(card.content.substring(0, 150));
+        const createdDate = new Date(card.creation_date).toLocaleDateString();
+        
+        previewElement.innerHTML = `
+            <div class="link-preview-header">
+                <h3 class="link-preview-title">${this.escapeHtml(title)}</h3>
+                <span class="link-preview-zettel-id">${zettelId}</span>
+            </div>
+            <div class="link-preview-content">${content}</div>
+            <div class="link-preview-metadata">
+                <div class="link-preview-meta-item">
+                    <i data-feather="calendar" class="link-preview-meta-icon"></i>
+                    <span>${createdDate}</span>
+                </div>
+                <div class="link-preview-meta-item">
+                    <i data-feather="eye" class="link-preview-meta-icon"></i>
+                    <span>${card.reps || 0} reviews</span>
+                </div>
+            </div>
+        `;
+        
+        // Add MathJax rendering if available
+        if (window.MathJax) {
+            MathJax.typesetPromise([previewElement]).catch((err) => console.log(err.message));
+        }
+    }
+
+    truncateContent(content, maxLength) {
+        if (!content) return '';
+        
+        // Remove markdown and wiki links for clean preview
+        const cleanContent = content
+            .replace(/\[\[([^\]]+)\]\]/g, '$1') // Remove wiki link syntax
+            .replace(/[#*_`~]/g, '') // Remove basic markdown
+            .replace(/\n+/g, ' ') // Replace newlines with spaces
+            .trim();
+            
+        if (cleanContent.length <= maxLength) {
+            return cleanContent;
+        }
+        
+        // Find last complete word within limit
+        const truncated = cleanContent.substring(0, maxLength);
+        const lastSpace = truncated.lastIndexOf(' ');
+        
+        if (lastSpace > maxLength * 0.8) {
+            return truncated.substring(0, lastSpace) + '...';
+        }
+        
+        return truncated + '...';
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    handleLinkTouch(linkId, linkText) {
+        // On touch devices, show preview after a brief delay
+        this.touchPreviewTimeout = setTimeout(() => {
+            this.showLinkPreview(linkId, linkText);
+        }, 500); // 500ms delay for touch preview
+    }
+
+    handleLinkTouchEnd(linkId) {
+        // Clear the touch preview timeout if touch ends before delay
+        if (this.touchPreviewTimeout) {
+            clearTimeout(this.touchPreviewTimeout);
+            this.touchPreviewTimeout = null;
+        }
+        
+        // Hide preview after a brief delay on touch end
+        setTimeout(() => {
+            this.hideLinkPreview(linkId);
+        }, 2000); // Keep preview visible for 2 seconds on mobile
     }
 }
 
