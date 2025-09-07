@@ -556,3 +556,22 @@ async fn test_api_response_structure() {
     assert!(card_data.get("reps").is_some());
     assert!(card_data.get("state").is_some());
 }
+
+#[tokio::test]
+async fn test_api_error_response_format() {
+    let server = create_test_server().await;
+    
+    // Test that error responses have the expected JSON structure
+    let fake_id = Uuid::new_v4();
+    let response = server
+        .get(&format!("/api/cards/{}", fake_id))
+        .await;
+    
+    response.assert_status(StatusCode::NOT_FOUND);
+    let body: Value = response.json();
+    
+    // Verify the error response has the expected structure
+    assert_eq!(body["success"], false);
+    assert!(body["error"].is_string());
+    assert!(body["error"].as_str().unwrap().contains("not found"));
+}

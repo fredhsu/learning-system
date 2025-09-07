@@ -181,6 +181,26 @@ impl Database {
         Ok(card)
     }
 
+    fn map_row_to_card(&self, row: sqlx::sqlite::SqliteRow) -> Result<Card> {
+        Ok(Card {
+            id: Uuid::parse_str(&row.get::<String, _>("id"))?,
+            zettel_id: row.get("zettel_id"),
+            title: row.get("title"),
+            content: row.get("content"),
+            creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
+            last_reviewed: row.get::<Option<String>, _>("last_reviewed")
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+            next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
+            difficulty: row.get("difficulty"),
+            stability: row.get("stability"),
+            retrievability: row.get("retrievability"),
+            reps: row.get("reps"),
+            lapses: row.get("lapses"),
+            state: row.get("state"),
+            links: row.get("links"),
+        })
+    }
+
     pub async fn get_card(&self, id: Uuid) -> Result<Option<Card>> {
         let row = sqlx::query(
             "SELECT * FROM cards WHERE id = ?1"
@@ -190,23 +210,7 @@ impl Database {
         .await?;
 
         if let Some(row) = row {
-            Ok(Some(Card {
-                id: Uuid::parse_str(&row.get::<String, _>("id"))?,
-                zettel_id: row.get("zettel_id"),
-                title: row.get("title"),
-                content: row.get("content"),
-                creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
-                last_reviewed: row.get::<Option<String>, _>("last_reviewed")
-                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
-                difficulty: row.get("difficulty"),
-                stability: row.get("stability"),
-                retrievability: row.get("retrievability"),
-                reps: row.get("reps"),
-                lapses: row.get("lapses"),
-                state: row.get("state"),
-                links: row.get("links"),
-            }))
+            Ok(Some(self.map_row_to_card(row)?))
         } else {
             Ok(None)
         }
@@ -233,28 +237,9 @@ impl Database {
     }
 
     fn rows_to_cards(&self, rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Vec<Card>> {
-        let mut cards = Vec::new();
-        for row in rows {
-            cards.push(Card {
-                id: Uuid::parse_str(&row.get::<String, _>("id"))?,
-                zettel_id: row.get("zettel_id"),
-                title: row.get("title"),
-                content: row.get("content"),
-                creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
-                last_reviewed: row.get::<Option<String>, _>("last_reviewed")
-                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
-                difficulty: row.get("difficulty"),
-                stability: row.get("stability"),
-                retrievability: row.get("retrievability"),
-                reps: row.get("reps"),
-                lapses: row.get("lapses"),
-                state: row.get("state"),
-                links: row.get("links"),
-            });
-        }
-
-        Ok(cards)
+        rows.into_iter()
+            .map(|row| self.map_row_to_card(row))
+            .collect()
     }
 
     pub async fn update_card_after_review(&self, card: &Card) -> Result<()> {
@@ -381,23 +366,7 @@ impl Database {
         .await?;
 
         if let Some(row) = row {
-            Ok(Some(Card {
-                id: Uuid::parse_str(&row.get::<String, _>("id"))?,
-                zettel_id: row.get("zettel_id"),
-                title: row.get("title"),
-                content: row.get("content"),
-                creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
-                last_reviewed: row.get::<Option<String>, _>("last_reviewed")
-                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
-                difficulty: row.get("difficulty"),
-                stability: row.get("stability"),
-                retrievability: row.get("retrievability"),
-                reps: row.get("reps"),
-                lapses: row.get("lapses"),
-                state: row.get("state"),
-                links: row.get("links"),
-            }))
+            Ok(Some(self.map_row_to_card(row)?))
         } else {
             Ok(None)
         }
@@ -502,23 +471,7 @@ impl Database {
             if let Some(links_json) = row.get::<Option<String>, _>("links") {
                 if let Ok(link_ids) = serde_json::from_str::<Vec<Uuid>>(&links_json) {
                     if link_ids.contains(&target_card_id) {
-                        linking_cards.push(Card {
-                            id: Uuid::parse_str(&row.get::<String, _>("id"))?,
-                            zettel_id: row.get("zettel_id"),
-                            title: row.get("title"),
-                            content: row.get("content"),
-                            creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
-                            last_reviewed: row.get::<Option<String>, _>("last_reviewed")
-                                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                            next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
-                            difficulty: row.get("difficulty"),
-                            stability: row.get("stability"),
-                            retrievability: row.get("retrievability"),
-                            reps: row.get("reps"),
-                            lapses: row.get("lapses"),
-                            state: row.get("state"),
-                            links: Some(links_json),
-                        });
+                        linking_cards.push(self.map_row_to_card(row)?);
                     }
                 }
             }

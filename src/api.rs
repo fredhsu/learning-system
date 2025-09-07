@@ -15,6 +15,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     card_service::CardService,
+    errors::{ApiError, ErrorContext, classify_database_error},
     llm_service::LLMService,
     models::*,
 };
@@ -71,21 +72,28 @@ impl<T> ApiResponse<T> {
 pub async fn create_card(
     State(state): State<AppState>,
     Json(request): Json<CreateCardWithZettelLinksRequest>,
-) -> Result<Json<ApiResponse<Card>>, StatusCode> {
-    match state.card_service.create_card_with_zettel_links(request).await {
-        Ok(card) => Ok(Json(ApiResponse::success(card))),
+) -> Result<Json<ApiResponse<Card>>, (StatusCode, Json<ApiResponse<()>>)> {
+    info!(
+        zettel_id = %request.zettel_id,
+        title = ?request.title,
+        "Creating new card"
+    );
+    
+    match state.card_service.create_card_with_zettel_links(request.clone()).await {
+        Ok(card) => {
+            info!(
+                card_id = %card.id,
+                zettel_id = %card.zettel_id,
+                "Card created successfully"
+            );
+            Ok(Json(ApiResponse::success(card)))
+        }
         Err(e) => {
-            error!(error = %e, "Error creating card");
-            let error_msg = e.to_string();
-            if error_msg.contains("already exists") {
-                Ok(Json(ApiResponse::error(error_msg)))
-            } else if error_msg.contains("required") {
-                Ok(Json(ApiResponse::error("Zettel ID is required".to_string())))
-            } else if error_msg.contains("not found") {
-                Ok(Json(ApiResponse::error(error_msg)))
-            } else {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
+            let classified_error = classify_database_error(&e);
+            let context = ErrorContext::new("create_card", "card")
+                .with_id(&request.zettel_id);
+            
+            Err(classified_error.to_response_with_context(context))
         }
     }
 }
@@ -93,13 +101,25 @@ pub async fn create_card(
 pub async fn get_card(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<ApiResponse<Card>>, StatusCode> {
+) -> Result<Json<ApiResponse<Card>>, (StatusCode, Json<ApiResponse<()>>)> {
+    debug!(card_id = %id, "Getting card");
+    
     match state.card_service.get_card(id).await {
-        Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Ok(Some(card)) => {
+            debug!(card_id = %id, zettel_id = %card.zettel_id, "Card retrieved successfully");
+            Ok(Json(ApiResponse::success(card)))
+        }
+        Ok(None) => {
+            let error = ApiError::NotFound(format!("Card with ID '{}' not found", id));
+            let context = ErrorContext::new("get_card", "card")
+                .with_id(&id.to_string());
+            Err(error.to_response_with_context(context))
+        }
         Err(e) => {
-            error!(card_id = %id, error = %e, "Error getting card");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error = ApiError::DatabaseError(e);
+            let context = ErrorContext::new("get_card", "card")
+                .with_id(&id.to_string());
+            Err(error.to_response_with_context(context))
         }
     }
 }
@@ -107,13 +127,29 @@ pub async fn get_card(
 pub async fn get_card_by_zettel_id(
     State(state): State<AppState>,
     Path(zettel_id): Path<String>,
-) -> Result<Json<ApiResponse<Card>>, StatusCode> {
+) -> Result<Json<ApiResponse<Card>>, (StatusCode, Json<ApiResponse<()>>)> {
+    debug!(zettel_id = %zettel_id, "Getting card by Zettel ID");
+    
     match state.card_service.get_card_by_zettel_id(&zettel_id).await {
-        Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Ok(Some(card)) => {
+            debug!(
+                card_id = %card.id,
+                zettel_id = %zettel_id,
+                "Card retrieved by Zettel ID successfully"
+            );
+            Ok(Json(ApiResponse::success(card)))
+        }
+        Ok(None) => {
+            let error = ApiError::NotFound(format!("Card with Zettel ID '{}' not found", zettel_id));
+            let context = ErrorContext::new("get_card_by_zettel_id", "card")
+                .with_id(&zettel_id);
+            Err(error.to_response_with_context(context))
+        }
         Err(e) => {
-            error!(zettel_id = %zettel_id, error = %e, "Error getting card by zettel ID");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error = ApiError::DatabaseError(e);
+            let context = ErrorContext::new("get_card_by_zettel_id", "card")
+                .with_id(&zettel_id);
+            Err(error.to_response_with_context(context))
         }
     }
 }
@@ -122,30 +158,51 @@ pub async fn update_card(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateCardWithZettelLinksRequest>,
-) -> Result<Json<ApiResponse<Card>>, StatusCode> {
+) -> Result<Json<ApiResponse<Card>>, (StatusCode, Json<ApiResponse<()>>)> {
+    info!(
+        card_id = %id,
+        zettel_id = ?request.zettel_id,
+        "Updating card"
+    );
+    
     match state.card_service.update_card_with_zettel_links(id, request).await {
-        Ok(Some(card)) => Ok(Json(ApiResponse::success(card))),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Ok(Some(card)) => {
+            info!(
+                card_id = %id,
+                zettel_id = %card.zettel_id,
+                "Card updated successfully"
+            );
+            Ok(Json(ApiResponse::success(card)))
+        }
+        Ok(None) => {
+            let error = ApiError::NotFound(format!("Card with ID '{}' not found", id));
+            let context = ErrorContext::new("update_card", "card")
+                .with_id(&id.to_string());
+            Err(error.to_response_with_context(context))
+        }
         Err(e) => {
-            error!(card_id = %id, error = %e, "Error updating card");
-            let error_msg = e.to_string();
-            if error_msg.contains("not found") {
-                Ok(Json(ApiResponse::error(error_msg)))
-            } else {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
+            let classified_error = classify_database_error(&e);
+            let context = ErrorContext::new("update_card", "card")
+                .with_id(&id.to_string());
+            Err(classified_error.to_response_with_context(context))
         }
     }
 }
 
 pub async fn get_all_cards(
     State(state): State<AppState>,
-) -> Result<Json<ApiResponse<Vec<Card>>>, StatusCode> {
+) -> Result<Json<ApiResponse<Vec<Card>>>, (StatusCode, Json<ApiResponse<()>>)> {
+    debug!("Getting all cards");
+    
     match state.card_service.get_all_cards().await {
-        Ok(cards) => Ok(Json(ApiResponse::success(cards))),
+        Ok(cards) => {
+            debug!(card_count = cards.len(), "All cards retrieved successfully");
+            Ok(Json(ApiResponse::success(cards)))
+        }
         Err(e) => {
-            error!(error = %e, "Error getting all cards");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error = ApiError::DatabaseError(e);
+            let context = ErrorContext::new("get_all_cards", "card");
+            Err(error.to_response_with_context(context))
         }
     }
 }
@@ -233,34 +290,33 @@ pub async fn get_topics(
 }
 
 // Review session endpoints
-pub async fn start_review_session(
-    State(state): State<AppState>,
-) -> Result<Json<ApiResponse<ReviewSession>>, StatusCode> {
-    // Get cards due for review with smart ordering
-    let due_cards = match state.card_service.get_cards_due_optimized().await {
-        Ok(cards) => cards,
-        Err(e) => {
-            error!(error = %e, "Error getting due cards");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+/// Retrieve cards due for review with error handling
+async fn get_due_cards_for_session(card_service: &CardService) -> Result<Vec<Card>, (StatusCode, Json<ApiResponse<()>>)> {
+    match card_service.get_cards_due_optimized().await {
+        Ok(cards) => {
+            debug!(card_count = cards.len(), "Retrieved cards due for review");
+            Ok(cards)
         }
-    };
-
-    if due_cards.is_empty() {
-        let empty_session = ReviewSession {
-            session_id: Uuid::new_v4(),
-            cards: vec![],
-            questions: HashMap::new(),
-            current_card: 0,
-            created_at: Utc::now(),
-        };
-        return Ok(Json(ApiResponse::success(empty_session)));
+        Err(e) => {
+            let error = ApiError::DatabaseError(e);
+            let context = ErrorContext::new("get_due_cards", "cards");
+            Err(error.to_response_with_context(context))
+        }
     }
+}
 
-    // Generate questions for all cards using batch processing
-    let all_questions = match state.llm_service.generate_batch_quiz_questions(&due_cards).await {
+/// Generate questions for all cards using batch processing with comprehensive fallbacks
+async fn generate_session_questions(
+    llm_service: &LLMService, 
+    cards: &[Card]
+) -> HashMap<Uuid, Vec<QuizQuestion>> {
+    info!(card_count = cards.len(), "Starting question generation for review session");
+    
+    // Try batch processing first
+    match llm_service.generate_batch_quiz_questions(cards).await {
         Ok(questions) => {
             info!(
-                card_count = due_cards.len(),
+                card_count = cards.len(),
                 generated_count = questions.len(),
                 "Successfully generated questions using batch processing"
             );
@@ -268,21 +324,27 @@ pub async fn start_review_session(
         }
         Err(e) => {
             warn!(
-                card_count = due_cards.len(),
+                card_count = cards.len(),
                 error = %e,
                 "Batch question generation failed, falling back to individual generation"
             );
-            // Fallback to individual generation (the method handles its own fallbacks)
+            
+            // Fallback to individual generation
             let mut individual_questions = HashMap::new();
-            for card in &due_cards {
-                match state.llm_service.generate_quiz_questions(card).await {
+            for card in cards {
+                match llm_service.generate_quiz_questions(card).await {
                     Ok(questions) => {
                         individual_questions.insert(card.id, questions);
                     }
                     Err(card_e) => {
-                        error!(card_id = %card.id, error = %card_e, "Error generating quiz for individual card");
+                        error!(
+                            card_id = %card.id, 
+                            error = %card_e, 
+                            "Error generating quiz for individual card"
+                        );
+                        
                         // Use local generation as final fallback
-                        match state.llm_service.generate_quiz_questions_local(card, "").await {
+                        match llm_service.generate_quiz_questions_local(card, "").await {
                             Ok(questions) => {
                                 individual_questions.insert(card.id, questions);
                             }
@@ -299,23 +361,83 @@ pub async fn start_review_session(
                     }
                 }
             }
+            
+            info!(
+                card_count = cards.len(),
+                generated_count = individual_questions.len(),
+                "Completed individual question generation with fallbacks"
+            );
             individual_questions
         }
-    };
+    }
+}
 
+/// Create and store a new review session
+fn create_and_store_session(
+    review_sessions: &Arc<Mutex<HashMap<Uuid, ReviewSession>>>,
+    cards: Vec<Card>,
+    questions: HashMap<Uuid, Vec<QuizQuestion>>
+) -> ReviewSession {
     let session = ReviewSession {
         session_id: Uuid::new_v4(),
-        cards: due_cards,
-        questions: all_questions,
+        cards,
+        questions,
         current_card: 0,
         created_at: Utc::now(),
     };
 
     // Store session in memory
     {
-        let mut sessions = state.review_sessions.lock().unwrap();
+        let mut sessions = review_sessions.lock().unwrap();
         sessions.insert(session.session_id, session.clone());
     }
+    
+    info!(
+        session_id = %session.session_id,
+        card_count = session.cards.len(),
+        "Review session created and stored"
+    );
+
+    session
+}
+
+pub async fn start_review_session(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<ReviewSession>>, (StatusCode, Json<ApiResponse<()>>)> {
+    info!("Starting new review session");
+    
+    // Step 1: Get cards due for review
+    let due_cards = get_due_cards_for_session(&state.card_service).await?;
+
+    // Handle empty case early
+    if due_cards.is_empty() {
+        info!("No cards due for review, creating empty session");
+        let empty_session = ReviewSession {
+            session_id: Uuid::new_v4(),
+            cards: vec![],
+            questions: HashMap::new(),
+            current_card: 0,
+            created_at: Utc::now(),
+        };
+        return Ok(Json(ApiResponse::success(empty_session)));
+    }
+
+    // Step 2: Generate questions for all cards
+    let all_questions = generate_session_questions(&state.llm_service, &due_cards).await;
+
+    // Step 3: Create and store the session
+    let session = create_and_store_session(
+        &state.review_sessions,
+        due_cards,
+        all_questions
+    );
+
+    info!(
+        session_id = %session.session_id,
+        card_count = session.cards.len(),
+        question_count = session.questions.values().map(|q| q.len()).sum::<usize>(),
+        "Review session started successfully"
+    );
 
     Ok(Json(ApiResponse::success(session)))
 }
@@ -539,18 +661,26 @@ pub async fn review_card(
 pub async fn delete_card(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<ApiResponse<bool>>, StatusCode> {
+) -> Result<Json<ApiResponse<bool>>, (StatusCode, Json<ApiResponse<()>>)> {
+    info!(card_id = %id, "Deleting card");
+    
     match state.card_service.delete_card(id).await {
         Ok(deleted) => {
             if deleted {
+                info!(card_id = %id, "Card deleted successfully");
                 Ok(Json(ApiResponse::success(true)))
             } else {
-                Err(StatusCode::NOT_FOUND)
+                let error = ApiError::NotFound(format!("Card with ID '{}' not found", id));
+                let context = ErrorContext::new("delete_card", "card")
+                    .with_id(&id.to_string());
+                Err(error.to_response_with_context(context))
             }
         }
         Err(e) => {
-            error!(card_id = %id, error = %e, "Error deleting card");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error = ApiError::DatabaseError(e);
+            let context = ErrorContext::new("delete_card", "card")
+                .with_id(&id.to_string());
+            Err(error.to_response_with_context(context))
         }
     }
 }

@@ -1,7 +1,9 @@
 mod api;
 mod card_service;
 mod database;
+mod errors;
 mod fsrs_scheduler;
+mod llm_providers;
 mod llm_service;
 mod models;
 
@@ -26,7 +28,8 @@ use crate::{
     api::{create_router, AppState},
     card_service::CardService,
     database::Database,
-    llm_service::{LLMService, LLMProvider},
+    llm_providers::LLMProviderType,
+    llm_service::LLMService,
 };
 
 #[tokio::main]
@@ -55,18 +58,18 @@ async fn main() -> Result<()> {
     let card_service = CardService::new(db);
     
     // Parse LLM provider configuration
-    let provider = match llm_provider.to_lowercase().as_str() {
-        "gemini" | "google" => LLMProvider::Gemini,
-        "openai" | "chatgpt" | "gpt" => LLMProvider::OpenAI,
+    let provider_type = match llm_provider.to_lowercase().as_str() {
+        "gemini" | "google" => LLMProviderType::Gemini,
+        "openai" | "chatgpt" | "gpt" => LLMProviderType::OpenAI,
         _ => {
             info!("Unknown LLM provider '{}', defaulting to OpenAI", llm_provider);
-            LLMProvider::OpenAI
+            LLMProviderType::OpenAI
         }
     };
     
-    let llm_service = LLMService::new_with_provider(llm_api_key, llm_base_url, provider.clone(), llm_model);
+    let llm_service = LLMService::new_with_provider(llm_api_key, llm_base_url, provider_type, llm_model);
     
-    info!("Initialized LLM service with provider: {:?}", provider);
+    info!("Initialized LLM service with provider: {:?}", provider_type);
 
     // Create application state
     let state = AppState {

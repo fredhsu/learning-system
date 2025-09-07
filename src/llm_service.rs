@@ -1,78 +1,13 @@
 use anyhow::Result;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::llm_providers::{LLMProvider, LLMProviderFactory, LLMProviderType, JsonResponseParser};
 use crate::models::{BatchGradingRequest, BatchGradingResult, Card, QuizQuestion};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub enum LLMProvider {
-    OpenAI,
-    Gemini,
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LLMRequest {
-    pub model: String,
-    pub messages: Vec<LLMMessage>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LLMMessage {
-    pub role: String,
-    pub content: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LLMResponse {
-    pub choices: Vec<LLMChoice>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LLMChoice {
-    pub message: LLMMessage,
-}
-
-// Gemini-specific structures
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeminiRequest {
-    pub contents: Vec<GeminiContent>,
-    #[serde(rename = "generationConfig")]
-    pub generation_config: GeminiGenerationConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeminiContent {
-    pub parts: Vec<GeminiPart>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeminiPart {
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeminiGenerationConfig {
-    pub temperature: f32,
-    #[serde(rename = "topK")]
-    pub top_k: i32,
-    #[serde(rename = "topP")]
-    pub top_p: f32,
-    #[serde(rename = "maxOutputTokens")]
-    pub max_output_tokens: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeminiResponse {
-    pub candidates: Vec<GeminiCandidate>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeminiCandidate {
-    pub content: GeminiContent,
-}
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneratedQuiz {
@@ -93,42 +28,32 @@ pub struct GradingResult {
 
 #[derive(Clone)]
 pub struct LLMService {
-    client: Client,
-    api_key: String,
-    base_url: String,
     provider: LLMProvider,
-    model: String,
+    json_parser: JsonResponseParser,
 }
 
 impl LLMService {
     #[allow(dead_code)]
     pub fn new(api_key: String, base_url: Option<String>) -> Self {
-        Self::new_with_provider(api_key, base_url, LLMProvider::OpenAI, None)
+        Self::new_with_provider(api_key, base_url, LLMProviderType::OpenAI, None)
     }
 
     pub fn new_with_provider(
         api_key: String, 
         base_url: Option<String>, 
-        provider: LLMProvider,
+        provider_type: LLMProviderType,
         model: Option<String>
     ) -> Self {
-        let (default_base_url, default_model) = match provider {
-            LLMProvider::OpenAI => (
-                "https://api.openai.com/v1".to_string(),
-                "gpt-4o-mini".to_string()
-            ),
-            LLMProvider::Gemini => (
-                "https://generativelanguage.googleapis.com/v1beta".to_string(),
-                "gemini-2.0-flash-exp".to_string()
-            ),
-        };
+        let provider = LLMProviderFactory::create_provider(
+            provider_type,
+            api_key,
+            base_url,
+            model,
+        );
 
         Self {
-            client: Client::new(),
-            api_key,
-            base_url: base_url.unwrap_or(default_base_url),
             provider,
-            model: model.unwrap_or(default_model),
+            json_parser: JsonResponseParser,
         }
     }
 
@@ -137,7 +62,7 @@ impl LLMService {
         Self::new_with_provider(
             api_key, 
             None, 
-            LLMProvider::Gemini,
+            LLMProviderType::Gemini,
             model.or_else(|| Some("gemini-2.0-flash-exp".to_string()))
         )
     }
@@ -148,118 +73,17 @@ impl LLMService {
     }
 
     async fn make_llm_request_with_system(&self, system_message: Option<&str>, prompt: &str) -> Result<String> {
-        match self.provider {
-            LLMProvider::OpenAI => self.make_openai_request_with_system(system_message, prompt).await,
-            LLMProvider::Gemini => self.make_gemini_request_with_system(system_message, prompt).await,
-        }
+        self.provider.make_request(system_message, prompt).await
     }
 
-    #[allow(dead_code)]
-    async fn make_openai_request(&self, prompt: &str) -> Result<String> {
-        self.make_openai_request_with_system(None, prompt).await
+    /// Get the provider name for logging and testing
+    pub fn provider_name(&self) -> &'static str {
+        self.provider.provider_name()
     }
 
-    async fn make_openai_request_with_system(&self, system_message: Option<&str>, prompt: &str) -> Result<String> {
-        let mut messages = Vec::new();
-        
-        if let Some(sys_msg) = system_message {
-            messages.push(LLMMessage {
-                role: "system".to_string(),
-                content: sys_msg.to_string(),
-            });
-        }
-        
-        messages.push(LLMMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        });
-
-        let request = LLMRequest {
-            model: self.model.clone(),
-            messages,
-        };
-
-        let response = self
-            .client
-            .post(&format!("{}/chat/completions", self.base_url))
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            error!("OpenAI API request failed: {}", error_text);
-            return Err(anyhow::anyhow!("OpenAI API request failed: {}", error_text));
-        }
-
-        let llm_response: LLMResponse = response.json().await?;
-        
-        if llm_response.choices.is_empty() {
-            return Err(anyhow::anyhow!("No choices in OpenAI response"));
-        }
-
-        Ok(llm_response.choices[0].message.content.clone())
-    }
-
-    #[allow(dead_code)]
-    async fn make_gemini_request(&self, prompt: &str) -> Result<String> {
-        self.make_gemini_request_with_system(None, prompt).await
-    }
-
-    async fn make_gemini_request_with_system(&self, system_message: Option<&str>, prompt: &str) -> Result<String> {
-        let full_prompt = match system_message {
-            Some(sys_msg) => format!("{}\n\n{}", sys_msg, prompt),
-            None => prompt.to_string(),
-        };
-
-        let request = GeminiRequest {
-            contents: vec![GeminiContent {
-                parts: vec![GeminiPart {
-                    text: full_prompt,
-                }],
-            }],
-            generation_config: GeminiGenerationConfig {
-                temperature: 0.7,
-                top_k: 40,
-                top_p: 0.9,
-                max_output_tokens: 2048,
-            },
-        };
-
-        let url = format!(
-            "{}/models/{}:generateContent?key={}", 
-            self.base_url, 
-            self.model, 
-            self.api_key
-        );
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            error!("Gemini API request failed: {}", error_text);
-            return Err(anyhow::anyhow!("Gemini API request failed: {}", error_text));
-        }
-
-        let gemini_response: GeminiResponse = response.json().await?;
-        
-        if gemini_response.candidates.is_empty() {
-            return Err(anyhow::anyhow!("No candidates in Gemini response"));
-        }
-
-        if gemini_response.candidates[0].content.parts.is_empty() {
-            return Err(anyhow::anyhow!("No parts in Gemini response"));
-        }
-
-        Ok(gemini_response.candidates[0].content.parts[0].text.clone())
+    /// Get the model name being used
+    pub fn model_name(&self) -> &str {
+        self.provider.model_name()
     }
 
     pub async fn generate_quiz_questions(&self, card: &Card) -> Result<Vec<QuizQuestion>> {
@@ -303,22 +127,20 @@ impl LLMService {
         let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
 
         {
-            // Extract JSON from markdown code blocks if present
-            let content = &response_text;
             debug!(
                 card_id = %card.id,
-                response_content = %content,
+                response_content = %response_text,
                 "Raw LLM response for quiz generation"
             );
             
-            let json_content = extract_json_from_response(content);
+            let json_content = JsonResponseParser::extract_json_from_response(&response_text);
             debug!(
                 card_id = %card.id,
                 extracted_json = %json_content,
                 "Extracted JSON from LLM response"
             );
 
-            match serde_json::from_str::<GeneratedQuiz>(&json_content) {
+            match self.json_parser.parse_json_response::<GeneratedQuiz>(&response_text) {
                 Ok(generated_quiz) => {
                     info!(
                         card_id = %card.id,
@@ -412,21 +234,20 @@ Guidelines:
         let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
 
         {
-            let content = &response_text;
             debug!(
                 card_count = cards.len(),
-                response_content = %content,
+                response_content = %response_text,
                 "Raw LLM response for batch quiz generation"
             );
             
-            let json_content = extract_json_from_response(content);
+            let json_content = JsonResponseParser::extract_json_from_response(&response_text);
             debug!(
                 card_count = cards.len(),
                 extracted_json = %json_content,
                 "Extracted JSON from batch quiz response"
             );
 
-            match serde_json::from_str::<BatchGeneratedQuiz>(&json_content) {
+            match self.json_parser.parse_json_response::<BatchGeneratedQuiz>(&response_text) {
                 Ok(batch_quiz) => {
                     // Convert string keys to UUIDs
                     let mut result = HashMap::new();
@@ -570,22 +391,20 @@ Guidelines:
         let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
 
         {
-            // Extract JSON from markdown code blocks if present
-            let content = &response_text;
             debug!(
                 card_id = %card.id,
-                response_content = %content,
+                response_content = %response_text,
                 "Raw LLM response for answer grading"
             );
             
-            let json_content = extract_json_from_response(content);
+            let json_content = JsonResponseParser::extract_json_from_response(&response_text);
             debug!(
                 card_id = %card.id,
                 extracted_json = %json_content,
                 "Extracted JSON from grading response"
             );
 
-            match serde_json::from_str::<GradingResult>(&json_content) {
+            match self.json_parser.parse_json_response::<GradingResult>(&response_text) {
                 Ok(grading_result) => {
                     info!(
                         card_id = %card.id,
@@ -705,21 +524,20 @@ Focus on conceptual understanding rather than exact text matching."#,
         let system_message = "You are an expert teacher focused on fair, understanding-based grading. Prioritize semantic meaning over exact text matching. Accept equivalent answers that demonstrate understanding. Always respond with valid JSON array in the requested format.";
         let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
 
-        let content = &response_text;
         debug!(
             request_count = grading_requests.len(),
-            response_content = %content,
+            response_content = %response_text,
             "Raw LLM response for batch grading"
         );
         
-        let json_content = extract_json_from_response(content);
+        let json_content = JsonResponseParser::extract_json_from_response(&response_text);
         debug!(
             request_count = grading_requests.len(),
             extracted_json = %json_content,
             "Extracted JSON from batch grading response"
         );
 
-        match serde_json::from_str::<Vec<BatchGradingResult>>(&json_content) {
+        match self.json_parser.parse_json_response::<Vec<BatchGradingResult>>(&response_text) {
             Ok(results) => {
                 info!(
                     request_count = grading_requests.len(),
@@ -795,41 +613,4 @@ Focus on conceptual understanding rather than exact text matching."#,
         }
         Ok(results)
     }
-}
-
-// Helper function to extract JSON from LLM responses that might be wrapped in markdown
-fn extract_json_from_response(content: &str) -> String {
-    // Try to find JSON within markdown code blocks
-    if let Some(start) = content.find("```json") {
-        if let Some(end) = content[start + 7..].find("```") {
-            let json_start = start + 7;
-            let json_end = json_start + end;
-            return content[json_start..json_end].trim().to_string();
-        }
-    }
-
-    // Try to find JSON within plain code blocks
-    if let Some(start) = content.find("```") {
-        if let Some(end) = content[start + 3..].find("```") {
-            let json_start = start + 3;
-            let json_end = json_start + end;
-            let potential_json = content[json_start..json_end].trim();
-            // Check if it looks like JSON
-            if potential_json.starts_with('{') || potential_json.starts_with('[') {
-                return potential_json.to_string();
-            }
-        }
-    }
-
-    // Try to find standalone JSON objects
-    if let Some(start) = content.find('{') {
-        if let Some(end) = content.rfind('}') {
-            if end > start {
-                return content[start..=end].to_string();
-            }
-        }
-    }
-
-    // Return original content if no JSON extraction patterns match
-    content.trim().to_string()
 }

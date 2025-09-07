@@ -23,6 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 dotenvy = "0.15"
 regex = "1.10"
+async-trait = "0.1"
 
 [[bin]]
 name = "migrate_titles"

@@ -31,6 +31,22 @@ This is a knowledge management and spaced repetition learning platform built in 
 - **reviews**: FSRS statistics and review history tracking
 - **backlinks**: Bidirectional linking system for reverse card relationships
 
+**Database Layer Improvements (2025-01-27)**:
+- Refactored card mapping to eliminate code duplication
+- Added centralized `map_row_to_card()` method in `Database` struct
+- Reduced duplicate code by 60+ lines across 4 database methods
+- Improved maintainability with single source of truth for card row mapping
+
+**API Layer Improvements (2025-01-27)**:
+- Implemented centralized error handling system with `ApiError` enum and `ErrorContext`
+- Eliminated inconsistent error handling patterns across API endpoints
+- Added structured error classification and consistent HTTP status code mapping
+- Standardized logging levels and messages for better debugging
+- Improved user experience with friendly error messages while preserving technical details
+- Refactored large `start_review_session()` function into 4 focused, testable components
+- Applied Single Responsibility Principle to improve code maintainability
+- Enhanced function modularity enabling independent unit testing and code reuse
+
 ## Development Commands
 
 ### Build and Run
@@ -140,7 +156,8 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 ### Testing Coverage
 - **Integration Tests**: Search functionality, UI preview, keyboard shortcuts, comprehensive backlink scenarios
 - **API Tests**: Search endpoints, response structure validation, URL encoding, backlinks API
-- **Database Tests**: Backlink CRUD operations, foreign key constraints, cascade deletions
+- **Database Tests**: Backlink CRUD operations, foreign key constraints, cascade deletions, refactored card mapping functionality
+- **Error Handling Tests**: Centralized error classification, context creation, consistent response mapping
 - **UI Feature Tests**: Navigation icons, loading states, responsive design validation
 - **Error Handling**: Edge cases, concurrent operations, invalid data handling, non-existent link targets
 - **Efficiency Tests**: Batch processing, smart ordering algorithms, fallback mechanisms
@@ -165,7 +182,10 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - Legacy endpoint cleanup removes unused and problematic API routes
 - Design system provides consistent foundation for future development
 - Mobile-first responsive approach supports modern device usage patterns
-- 114 total tests covering all functionality including FSRS integration, rating aggregation, and batch question interface
+- Database layer refactoring eliminates 60+ lines of duplicate card mapping code (2025-01-27)
+- API error handling centralization with structured error types and consistent logging (2025-01-27)
+- Large function refactoring improves testability with 54% complexity reduction (2025-01-27)
+- 118 total tests covering all functionality including FSRS integration, rating aggregation, batch question interface, database refactoring, centralized error handling, and modular function architecture
 
 ### Performance Achievements
 - **API Call Reduction**: 85-90% fewer calls per review session (from ~15-20 to 1-2 calls)
