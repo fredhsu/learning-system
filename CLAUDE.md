@@ -102,12 +102,13 @@ The system uses the rs-fsrs crate for spaced repetition scheduling. Review inter
 Cards support wiki-style bidirectional linking with automatic backlink maintenance. When Card A links to Card B, Card B automatically shows Card A in its backlinks section. The linking mechanism preserves referential integrity through foreign key constraints and supports efficient graph traversal for related content discovery. Non-existent link targets are gracefully handled.
 
 ### LLM Integration Points
+- **OpenAI Responses API**: Updated from chat/completions to modern /responses endpoint with improved request/response structure
 - **Batch Quiz Generation**: Multiple cards processed in single API calls for efficiency
 - **Session-Based Answer Grading**: Context-aware grading using actual questions from session storage with suggested rating display (deferred FSRS updates)
 - **Rating Aggregation**: Individual question ratings are collected and averaged for single FSRS update per card
 - **Semantic Answer Grading**: Advanced grading with comprehensive understanding prompts
 - **Smart Card Ordering**: Content similarity and difficulty-based optimization for better LLM context
-- **Structured Logging**: Comprehensive performance monitoring and debugging capabilities
+- **Structured Logging**: Comprehensive performance monitoring and debugging capabilities with response ID tracking
 - **Fallback Systems**: Triple redundancy (batch → individual → local) ensures reliability
 
 ### Database Constraints
@@ -192,6 +193,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - Database layer refactoring eliminates 60+ lines of duplicate card mapping code (2025-01-27)
 - API error handling centralization with structured error types and consistent logging (2025-01-27)
 - Large function refactoring improves testability with 54% complexity reduction (2025-01-27)
+- OpenAI Responses API migration from /chat/completions to /responses with improved structure (2025-01-27)
 - **Backend Tests**: 118 total Rust tests covering all functionality including FSRS integration, rating aggregation, batch question interface, database refactoring, centralized error handling, and modular function architecture
 - **Frontend Tests**: 150+ JavaScript test cases with custom test framework covering unit tests, integration tests, user workflows, performance, and accessibility
 
@@ -203,6 +205,8 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **FSRS Optimization**: Single database update per card with aggregated ratings (prevents overwrite issues)
 - **Monitoring**: Comprehensive structured logging for performance visibility
 
-**Latest Update**: Batch Question Interface completed - all questions for a card now display simultaneously with batch submission, comprehensive scoring, and performance-based suggested ratings. This significantly improves review efficiency and user experience.
+**Latest Update (2025-01-27)**: OpenAI Responses API Migration - Updated from /chat/completions to modern /responses endpoint with enhanced request structure using `input` field instead of messages array. Improved response parsing with status validation and response ID logging for better debugging. All 143 tests pass with full backward compatibility maintained.
+
+**Previous Update**: Batch Question Interface completed - all questions for a card now display simultaneously with batch submission, comprehensive scoring, and performance-based suggested ratings. This significantly improves review efficiency and user experience.
 **Current Phase**: Phase 4 UI enhancements in progress (link preview cards, collapsible sections, visual hierarchy improvements)
 - The newest models for GPT are gpt-5 and gpt-5-mini

@@ -52,21 +52,44 @@ pub struct OpenAIProvider {
     model: String,
 }
 
-/// OpenAI-specific request structures
+/// OpenAI-specific request structures for Responses API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OpenAIRequest {
     model: String,
-    messages: Vec<LLMMessage>,
+    input: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructions: Option<String>,
 }
 
+/// OpenAI Responses API response structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OpenAIResponse {
-    choices: Vec<OpenAIChoice>,
+    id: String,
+    object: String,
+    status: String,
+    output: Vec<OpenAIOutput>,
+    usage: Option<OpenAIUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct OpenAIChoice {
-    message: LLMMessage,
+struct OpenAIOutput {
+    #[serde(rename = "type")]
+    output_type: String,
+    content: Vec<OpenAIContent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OpenAIContent {
+    #[serde(rename = "type")]
+    content_type: String,
+    text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OpenAIUsage {
+    input_tokens: u32,
+    output_tokens: u32,
+    total_tokens: u32,
 }
 
 impl OpenAIProvider {
@@ -82,23 +105,18 @@ impl OpenAIProvider {
 
 impl OpenAIProvider {
     pub async fn make_request(&self, system_message: Option<&str>, prompt: &str) -> Result<String> {
-        let mut messages = Vec::new();
-        
-        if let Some(sys_msg) = system_message {
-            messages.push(LLMMessage {
-                role: "system".to_string(),
-                content: sys_msg.to_string(),
-            });
-        }
-        
-        messages.push(LLMMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        });
+        // For Responses API, combine system message and prompt into input
+        let input = match system_message {
+            Some(sys_msg) => format!("{}
+
+{}", sys_msg, prompt),
+            None => prompt.to_string(),
+        };
 
         let request_body = OpenAIRequest {
             model: self.model.clone(),
-            messages,
+            input,
+            instructions: system_message.map(|s| s.to_string()),
         };
 
         info!(
@@ -111,7 +129,7 @@ impl OpenAIProvider {
 
         let response = self
             .client
-            .post(&format!("{}/chat/completions", self.base_url))
+            .post(&format!("{}/responses", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&request_body)
@@ -132,15 +150,25 @@ impl OpenAIProvider {
 
         let openai_response: OpenAIResponse = response.json().await?;
         
-        if openai_response.choices.is_empty() {
-            return Err(anyhow::anyhow!("No choices in OpenAI response"));
+        if openai_response.status != "completed" {
+            return Err(anyhow::anyhow!("OpenAI response not completed: {}", openai_response.status));
         }
 
-        let response_content = openai_response.choices[0].message.content.clone();
+        if openai_response.output.is_empty() {
+            return Err(anyhow::anyhow!("No output in OpenAI response"));
+        }
+
+        let first_output = &openai_response.output[0];
+        if first_output.content.is_empty() {
+            return Err(anyhow::anyhow!("No content in OpenAI response output"));
+        }
+
+        let response_content = first_output.content[0].text.clone();
         info!(
             provider = self.provider_name(),
             response_length = response_content.len(),
-            "Successfully received LLM response"
+            response_id = %openai_response.id,
+            "Successfully received LLM response from Responses API"
         );
 
         Ok(response_content)
