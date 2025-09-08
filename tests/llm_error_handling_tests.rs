@@ -1,4 +1,5 @@
-use learning_system::{LLMService, LLMProvider, Card, QuizQuestion};
+use learning_system::{LLMService, Card, QuizQuestion};
+use learning_system::llm_providers::LLMProviderType;
 use uuid::Uuid;
 use chrono::Utc;
 
@@ -49,8 +50,8 @@ async fn test_invalid_api_key_handling() {
     ];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -82,8 +83,8 @@ async fn test_invalid_base_url_handling() {
     ];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -116,8 +117,8 @@ async fn test_empty_content_handling() {
     ];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -172,8 +173,8 @@ async fn test_malformed_question_handling() {
     ];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -201,8 +202,8 @@ async fn test_concurrent_service_creation() {
     use tokio::task;
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -238,8 +239,8 @@ async fn test_concurrent_service_creation() {
 async fn test_resource_cleanup() {
     // Test that services can be created and dropped without resource leaks
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -273,8 +274,8 @@ async fn test_model_name_validation() {
     ];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -307,8 +308,8 @@ async fn test_network_timeout_scenarios() {
     ];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -331,15 +332,15 @@ async fn test_network_timeout_scenarios() {
 #[tokio::test] 
 async fn test_provider_enum_exhaustiveness() {
     // Test that we handle all provider variants
-    match LLMProvider::OpenAI {
-        LLMProvider::OpenAI => println!("✅ OpenAI variant handled"),
-        LLMProvider::Gemini => panic!("Should not reach Gemini branch"),
+    match LLMProviderType::OpenAI {
+        LLMProviderType::OpenAI => println!("✅ OpenAI variant handled"),
+        LLMProviderType::Gemini => panic!("Should not reach Gemini branch"),
         // This should cause a compile error if we add new providers without updating tests
     }
     
-    match LLMProvider::Gemini {
-        LLMProvider::OpenAI => panic!("Should not reach OpenAI branch"),
-        LLMProvider::Gemini => println!("✅ Gemini variant handled"),
+    match LLMProviderType::Gemini {
+        LLMProviderType::OpenAI => panic!("Should not reach OpenAI branch"),
+        LLMProviderType::Gemini => println!("✅ Gemini variant handled"),
         // This should cause a compile error if we add new providers without updating tests  
     }
     

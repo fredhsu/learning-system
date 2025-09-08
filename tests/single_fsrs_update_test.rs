@@ -1,6 +1,7 @@
 use axum_test::TestServer;
 use serde_json::{json, Value};
-use learning_system::{api::*, CardService, Database, LLMService, LLMProvider};
+use learning_system::{api::*, CardService, Database, LLMService};
+use learning_system::llm_providers::LLMProviderType;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -10,7 +11,7 @@ async fn create_test_server() -> TestServer {
     let llm_service = LLMService::new_with_provider(
         "test_key".to_string(), 
         None, 
-        LLMProvider::OpenAI, 
+        LLMProviderType::OpenAI, 
         None
     );
     let app_state = AppState {

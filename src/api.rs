@@ -20,6 +20,9 @@ use crate::{
     models::*,
 };
 
+// Import logging macros
+use crate::{log_api_start, log_api_success, log_api_error, log_api_warn};
+
 #[derive(Clone)]
 pub struct AppState {
     pub card_service: CardService,
@@ -102,20 +105,22 @@ pub async fn get_card(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<Card>>, (StatusCode, Json<ApiResponse<()>>)> {
-    debug!(card_id = %id, "Getting card");
+    log_api_start!("get_card", card_id = id);
     
     match state.card_service.get_card(id).await {
         Ok(Some(card)) => {
-            debug!(card_id = %id, zettel_id = %card.zettel_id, "Card retrieved successfully");
+            log_api_success!("get_card", card_id = id, "card retrieved successfully");
             Ok(Json(ApiResponse::success(card)))
         }
         Ok(None) => {
+            log_api_warn!("get_card", card_id = id, "card not found");
             let error = ApiError::NotFound(format!("Card with ID '{}' not found", id));
             let context = ErrorContext::new("get_card", "card")
                 .with_id(&id.to_string());
             Err(error.to_response_with_context(context))
         }
         Err(e) => {
+            log_api_error!("get_card", card_id = id, error = e, "database error retrieving card");
             let error = ApiError::DatabaseError(e);
             let context = ErrorContext::new("get_card", "card")
                 .with_id(&id.to_string());

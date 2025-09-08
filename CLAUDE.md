@@ -70,9 +70,14 @@ grep "batch" logs/learning-system.log.*              # Search across all logs
 
 ### Testing
 ```bash
+# Backend tests (Rust)
 cargo test           # Run all tests
 cargo test --lib     # Run library tests only
 cargo test --bin     # Run binary tests only
+
+# Frontend tests (JavaScript)
+# Open static/test-runner.html in browser for interactive testing
+# Tests run automatically on page load with detailed reporting
 ```
 
 ### Code Quality
@@ -120,6 +125,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Icon System**: Feather Icons with SVG sprites for scalable, accessible iconography
 - **Responsive Strategy**: Mobile-first CSS with progressive enhancement for larger screens
 - **Review Interface**: Collapsible card display showing titles by default with expandable content sections, batch question display with simultaneous answering
+- **Testing Framework**: Custom lightweight JavaScript test framework with 150+ test cases, browser-based test runner, and comprehensive coverage of unit tests, integration tests, and user workflows
 
 ## Project Status
 **Phase 4 In Progress**: Advanced UI enhancements building on completed efficiency optimizations. Card Header Enhancement completed with modern Zettel ID badges and improved visual hierarchy. Remaining Phase 4 features include linking system visibility, information architecture improvements, and enhanced link experience.
@@ -166,6 +172,7 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - **Suggested Rating Tests**: UI response format validation for suggested rating display functionality
 - **FSRS Integration Tests**: Single update per card validation, rating aggregation, and deferred update functionality
 - **Batch Interface Tests**: Simultaneous question display, answer validation, batch submission, and comprehensive result display
+- **Frontend Tests (2025-09-08)**: Comprehensive JavaScript test suite with 150+ test cases covering core functionality, search, wiki links, review sessions, and complete user workflows
 
 ### Development Notes
 - All Phase 2 UI/UX improvements from UI_IMPROVEMENTS.md completed
@@ -185,7 +192,8 @@ Cards support wiki-style bidirectional linking with automatic backlink maintenan
 - Database layer refactoring eliminates 60+ lines of duplicate card mapping code (2025-01-27)
 - API error handling centralization with structured error types and consistent logging (2025-01-27)
 - Large function refactoring improves testability with 54% complexity reduction (2025-01-27)
-- 118 total tests covering all functionality including FSRS integration, rating aggregation, batch question interface, database refactoring, centralized error handling, and modular function architecture
+- **Backend Tests**: 118 total Rust tests covering all functionality including FSRS integration, rating aggregation, batch question interface, database refactoring, centralized error handling, and modular function architecture
+- **Frontend Tests**: 150+ JavaScript test cases with custom test framework covering unit tests, integration tests, user workflows, performance, and accessibility
 
 ### Performance Achievements
 - **API Call Reduction**: 85-90% fewer calls per review session (from ~15-20 to 1-2 calls)

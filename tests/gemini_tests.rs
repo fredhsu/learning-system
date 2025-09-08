@@ -1,4 +1,5 @@
-use learning_system::{LLMService, LLMProvider, Card};
+use learning_system::{LLMService, Card};
+use learning_system::llm_providers::LLMProviderType;
 use uuid::Uuid;
 use chrono::Utc;
 
@@ -38,7 +39,7 @@ async fn test_gemini_with_custom_base_url() {
     let _service = LLMService::new_with_provider(
         "test-key".to_string(),
         Some("https://generativelanguage.googleapis.com/v1beta".to_string()),
-        LLMProvider::Gemini,
+        LLMProviderType::Gemini,
         Some("gemini-2.0-flash-exp".to_string())
     );
     
@@ -51,7 +52,7 @@ async fn test_llm_provider_configuration() {
     let _openai_service = LLMService::new_with_provider(
         "test-key".to_string(),
         Some("https://api.openai.com/v1".to_string()),
-        LLMProvider::OpenAI,
+        LLMProviderType::OpenAI,
         Some("gpt-4o-mini".to_string())
     );
     assert!(true, "OpenAI service configured successfully");
@@ -60,7 +61,7 @@ async fn test_llm_provider_configuration() {
     let _gemini_service = LLMService::new_with_provider(
         "test-key".to_string(),
         None, // Use default base URL
-        LLMProvider::Gemini,
+        LLMProviderType::Gemini,
         Some("gemini-2.0-flash-exp".to_string())
     );
     assert!(true, "Gemini service configured successfully");
@@ -69,8 +70,8 @@ async fn test_llm_provider_configuration() {
 #[tokio::test]
 async fn test_provider_enum_serialization() {
     // Test that the provider enum can be serialized/deserialized
-    let openai_provider = LLMProvider::OpenAI;
-    let gemini_provider = LLMProvider::Gemini;
+    let openai_provider = LLMProviderType::OpenAI;
+    let gemini_provider = LLMProviderType::Gemini;
     
     // Test debug formatting
     let openai_debug = format!("{:?}", openai_provider);
@@ -80,8 +81,8 @@ async fn test_provider_enum_serialization() {
     assert_eq!(gemini_debug, "Gemini");
     
     // Test equality
-    assert_eq!(openai_provider, LLMProvider::OpenAI);
-    assert_eq!(gemini_provider, LLMProvider::Gemini);
+    assert_eq!(openai_provider, LLMProviderType::OpenAI);
+    assert_eq!(gemini_provider, LLMProviderType::Gemini);
     assert_ne!(openai_provider, gemini_provider);
 }
 
@@ -110,14 +111,14 @@ async fn test_provider_defaults() {
     let _openai_service = LLMService::new_with_provider(
         "test-key".to_string(),
         None, // Use defaults
-        LLMProvider::OpenAI,
+        LLMProviderType::OpenAI,
         None  // Use default model
     );
     
     let _gemini_service = LLMService::new_with_provider(
         "test-key".to_string(),
         None, // Use defaults  
-        LLMProvider::Gemini,
+        LLMProviderType::Gemini,
         None  // Use default model
     );
     
@@ -131,8 +132,8 @@ async fn test_provider_compatibility() {
     // (This tests the interface consistency, not actual API calls)
     
     let providers = vec![
-        ("OpenAI", LLMProvider::OpenAI, "gpt-4o-mini"),
-        ("Gemini", LLMProvider::Gemini, "gemini-2.0-flash-exp"),
+        ("OpenAI", LLMProviderType::OpenAI, "gpt-4o-mini"),
+        ("Gemini", LLMProviderType::Gemini, "gemini-2.0-flash-exp"),
     ];
     
     for (name, provider, model) in providers {
@@ -155,8 +156,8 @@ async fn test_card_structure_compatibility() {
     let card = create_test_card();
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {

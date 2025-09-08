@@ -6,6 +6,7 @@ pub mod errors;
 pub mod fsrs_scheduler;
 pub mod llm_providers;
 pub mod llm_service;
+pub mod logging;
 pub mod models;
 
 #[cfg(test)]

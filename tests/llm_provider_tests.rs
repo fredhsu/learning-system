@@ -1,4 +1,5 @@
-use learning_system::{LLMService, LLMProvider, Card, QuizQuestion, BatchGradingRequest};
+use learning_system::{LLMService, Card, QuizQuestion, BatchGradingRequest};
+use learning_system::llm_providers::LLMProviderType;
 use uuid::Uuid;
 use chrono::Utc;
 
@@ -34,8 +35,8 @@ fn create_test_question() -> QuizQuestion {
 async fn test_all_providers_support_same_interface() {
     // Test that all providers implement the same public interface
     let providers = vec![
-        ("OpenAI", LLMProvider::OpenAI),
-        ("Gemini", LLMProvider::Gemini),
+        ("OpenAI", LLMProviderType::OpenAI),
+        ("Gemini", LLMProviderType::Gemini),
     ];
     
     for (name, provider) in providers {
@@ -64,7 +65,7 @@ async fn test_provider_specific_defaults() {
     let _openai_service = LLMService::new_with_provider(
         "sk-test123".to_string(),
         None, // Should use OpenAI default base URL
-        LLMProvider::OpenAI,
+        LLMProviderType::OpenAI,
         None  // Should use default model
     );
     
@@ -72,7 +73,7 @@ async fn test_provider_specific_defaults() {
     let _gemini_service = LLMService::new_with_provider(
         "AIza-test123".to_string(),
         None, // Should use Gemini default base URL  
-        LLMProvider::Gemini,
+        LLMProviderType::Gemini,
         None  // Should use default model
     );
     
@@ -88,8 +89,8 @@ async fn test_model_customization() {
     // Test custom model specification for each provider
     
     let test_cases = vec![
-        (LLMProvider::OpenAI, vec!["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]),
-        (LLMProvider::Gemini, vec!["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"]),
+        (LLMProviderType::OpenAI, vec!["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]),
+        (LLMProviderType::Gemini, vec!["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"]),
     ];
     
     for (provider, models) in test_cases {
@@ -113,12 +114,12 @@ async fn test_base_url_customization() {
     // Test custom base URL specification for different use cases
     
     let test_cases = vec![
-        (LLMProvider::OpenAI, vec![
+        (LLMProviderType::OpenAI, vec![
             "https://api.openai.com/v1",
             "https://api.openai.com/v1/",  // trailing slash
             "http://localhost:8080/v1",    // local proxy
         ]),
-        (LLMProvider::Gemini, vec![
+        (LLMProviderType::Gemini, vec![
             "https://generativelanguage.googleapis.com/v1beta",
             "https://generativelanguage.googleapis.com/v1beta/", // trailing slash
             "http://localhost:3001/v1beta", // local proxy
@@ -149,8 +150,8 @@ async fn test_batch_operations_interface() {
     let _cards = vec![card1.clone(), card2.clone()];
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -186,8 +187,8 @@ async fn test_json_response_structures() {
     // Test that both providers expect compatible response structures
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     // Mock expected response structures that both providers should handle
@@ -232,8 +233,8 @@ async fn test_json_response_structures() {
 async fn test_provider_enum_completeness() {
     // Test that the provider enum covers all expected cases
     let all_providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     // Test serialization/deserialization
@@ -248,7 +249,7 @@ async fn test_provider_enum_completeness() {
     }
     
     // Test inequality between different providers
-    assert_ne!(LLMProvider::OpenAI, LLMProvider::Gemini, "Different providers should not be equal");
+    assert_ne!(LLMProviderType::OpenAI, LLMProviderType::Gemini, "Different providers should not be equal");
     
     assert!(true, "Provider enum is complete and consistent");
 }
@@ -269,7 +270,7 @@ async fn test_convenience_constructors() {
     let _custom_service = LLMService::new_with_provider(
         "test-key".to_string(),
         Some("https://custom.endpoint.com".to_string()),
-        LLMProvider::OpenAI,
+        LLMProviderType::OpenAI,
         Some("custom-model".to_string())
     );
     println!("✅ Full provider constructor works");

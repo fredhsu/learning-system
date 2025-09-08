@@ -1,4 +1,4 @@
-use learning_system::{LLMProvider};
+use learning_system::llm_providers::LLMProviderType;
 
 #[test]
 fn test_provider_string_parsing() {
@@ -6,28 +6,28 @@ fn test_provider_string_parsing() {
     
     let test_cases = vec![
         // OpenAI variants
-        ("openai", LLMProvider::OpenAI),
-        ("OpenAI", LLMProvider::OpenAI),
-        ("OPENAI", LLMProvider::OpenAI),
-        ("chatgpt", LLMProvider::OpenAI),
-        ("ChatGPT", LLMProvider::OpenAI),
-        ("gpt", LLMProvider::OpenAI),
-        ("GPT", LLMProvider::OpenAI),
+        ("openai", LLMProviderType::OpenAI),
+        ("OpenAI", LLMProviderType::OpenAI),
+        ("OPENAI", LLMProviderType::OpenAI),
+        ("chatgpt", LLMProviderType::OpenAI),
+        ("ChatGPT", LLMProviderType::OpenAI),
+        ("gpt", LLMProviderType::OpenAI),
+        ("GPT", LLMProviderType::OpenAI),
         
         // Gemini variants  
-        ("gemini", LLMProvider::Gemini),
-        ("Gemini", LLMProvider::Gemini),
-        ("GEMINI", LLMProvider::Gemini),
-        ("google", LLMProvider::Gemini),
-        ("Google", LLMProvider::Gemini),
-        ("GOOGLE", LLMProvider::Gemini),
+        ("gemini", LLMProviderType::Gemini),
+        ("Gemini", LLMProviderType::Gemini),
+        ("GEMINI", LLMProviderType::Gemini),
+        ("google", LLMProviderType::Gemini),
+        ("Google", LLMProviderType::Gemini),
+        ("GOOGLE", LLMProviderType::Gemini),
     ];
     
     for (input, expected) in test_cases {
         let actual = match input.to_lowercase().as_str() {
-            "gemini" | "google" => LLMProvider::Gemini,
-            "openai" | "chatgpt" | "gpt" => LLMProvider::OpenAI,
-            _ => LLMProvider::OpenAI, // default
+            "gemini" | "google" => LLMProviderType::Gemini,
+            "openai" | "chatgpt" | "gpt" => LLMProviderType::OpenAI,
+            _ => LLMProviderType::OpenAI, // default
         };
         
         assert_eq!(actual, expected, "Input '{}' should map to {:?}", input, expected);
@@ -44,16 +44,16 @@ fn test_unknown_provider_defaults_to_openai() {
     
     for provider_str in unknown_providers {
         let actual = match provider_str.to_lowercase().as_str() {
-            "gemini" | "google" => LLMProvider::Gemini,
-            "openai" | "chatgpt" | "gpt" => LLMProvider::OpenAI,
+            "gemini" | "google" => LLMProviderType::Gemini,
+            "openai" | "chatgpt" | "gpt" => LLMProviderType::OpenAI,
             _ => {
                 // This simulates the logging that happens in main.rs
                 println!("Unknown LLM provider '{}', defaulting to OpenAI", provider_str);
-                LLMProvider::OpenAI
+                LLMProviderType::OpenAI
             }
         };
         
-        assert_eq!(actual, LLMProvider::OpenAI, "Unknown provider '{}' should default to OpenAI", provider_str);
+        assert_eq!(actual, LLMProviderType::OpenAI, "Unknown provider '{}' should default to OpenAI", provider_str);
         println!("✅ Unknown provider '{}' defaults to OpenAI", provider_str);
     }
 }
@@ -65,7 +65,7 @@ fn test_environment_variable_scenarios() {
     struct EnvTestCase {
         llm_provider: Option<&'static str>,
         _llm_model: Option<&'static str>,
-        expected_provider: LLMProvider,
+        expected_provider: LLMProviderType,
         description: &'static str,
     }
     
@@ -73,25 +73,25 @@ fn test_environment_variable_scenarios() {
         EnvTestCase {
             llm_provider: None,
             _llm_model: None,
-            expected_provider: LLMProvider::OpenAI, // default
+            expected_provider: LLMProviderType::OpenAI, // default
             description: "No environment variables set"
         },
         EnvTestCase {
             llm_provider: Some("gemini"),
             _llm_model: Some("gemini-2.0-flash-exp"),
-            expected_provider: LLMProvider::Gemini,
+            expected_provider: LLMProviderType::Gemini,
             description: "Gemini with specific model"
         },
         EnvTestCase {
             llm_provider: Some("openai"),
             _llm_model: Some("gpt-4o-mini"),
-            expected_provider: LLMProvider::OpenAI,
+            expected_provider: LLMProviderType::OpenAI,
             description: "OpenAI with specific model"
         },
         EnvTestCase {
             llm_provider: Some("gemini"),
             _llm_model: None,
-            expected_provider: LLMProvider::Gemini,
+            expected_provider: LLMProviderType::Gemini,
             description: "Gemini with default model"
         },
     ];
@@ -101,9 +101,9 @@ fn test_environment_variable_scenarios() {
         let llm_provider_str = test_case.llm_provider.unwrap_or("openai");
         
         let provider = match llm_provider_str.to_lowercase().as_str() {
-            "gemini" | "google" => LLMProvider::Gemini,
-            "openai" | "chatgpt" | "gpt" => LLMProvider::OpenAI,
-            _ => LLMProvider::OpenAI,
+            "gemini" | "google" => LLMProviderType::Gemini,
+            "openai" | "chatgpt" | "gpt" => LLMProviderType::OpenAI,
+            _ => LLMProviderType::OpenAI,
         };
         
         assert_eq!(provider, test_case.expected_provider, "{}", test_case.description);
@@ -117,7 +117,7 @@ fn test_api_key_format_validation() {
     
     struct ApiKeyTest {
         key: &'static str,
-        provider: LLMProvider,
+        provider: LLMProviderType,
         is_valid_format: bool,
         description: &'static str,
     }
@@ -126,13 +126,13 @@ fn test_api_key_format_validation() {
         // OpenAI key patterns
         ApiKeyTest {
             key: "sk-1234567890abcdef1234567890abcdef12345678",
-            provider: LLMProvider::OpenAI,
+            provider: LLMProviderType::OpenAI,
             is_valid_format: true,
             description: "Valid OpenAI key format"
         },
         ApiKeyTest {
             key: "sk-short",
-            provider: LLMProvider::OpenAI,
+            provider: LLMProviderType::OpenAI,
             is_valid_format: false,
             description: "Too short OpenAI key"
         },
@@ -140,13 +140,13 @@ fn test_api_key_format_validation() {
         // Gemini key patterns
         ApiKeyTest {
             key: "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
-            provider: LLMProvider::Gemini,
+            provider: LLMProviderType::Gemini,
             is_valid_format: true,
             description: "Valid Gemini key format"
         },
         ApiKeyTest {
             key: "AIza-short",
-            provider: LLMProvider::Gemini,
+            provider: LLMProviderType::Gemini,
             is_valid_format: false,
             description: "Too short Gemini key"
         },
@@ -154,7 +154,7 @@ fn test_api_key_format_validation() {
         // Generic/test keys
         ApiKeyTest {
             key: "test-key",
-            provider: LLMProvider::OpenAI,
+            provider: LLMProviderType::OpenAI,
             is_valid_format: true, // We accept test keys
             description: "Test key format"
         },
@@ -163,10 +163,10 @@ fn test_api_key_format_validation() {
     for test_case in test_cases {
         // Basic format validation (this is just for testing)
         let format_check = match test_case.provider {
-            LLMProvider::OpenAI => {
+            LLMProviderType::OpenAI => {
                 test_case.key.starts_with("sk-") || test_case.key == "test-key" || test_case.key.len() > 10
             },
-            LLMProvider::Gemini => {
+            LLMProviderType::Gemini => {
                 test_case.key.starts_with("AIza") || test_case.key == "test-key" || test_case.key.len() > 10
             },
         };
@@ -214,8 +214,8 @@ fn test_base_url_defaults() {
     // Test default base URLs for each provider
     
     let defaults = vec![
-        (LLMProvider::OpenAI, "https://api.openai.com/v1"),
-        (LLMProvider::Gemini, "https://generativelanguage.googleapis.com/v1beta"),
+        (LLMProviderType::OpenAI, "https://api.openai.com/v1"),
+        (LLMProviderType::Gemini, "https://generativelanguage.googleapis.com/v1beta"),
     ];
     
     for (provider, expected_url) in defaults {

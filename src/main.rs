@@ -1,10 +1,12 @@
 mod api;
 mod card_service;
+mod config;
 mod database;
 mod errors;
 mod fsrs_scheduler;
 mod llm_providers;
 mod llm_service;
+mod logging;
 mod models;
 
 use anyhow::Result;
@@ -15,7 +17,6 @@ use axum::{
     Router,
 };
 use std::collections::HashMap;
-use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::fs;
 use tower::ServiceBuilder;
@@ -27,49 +28,41 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use crate::{
     api::{create_router, AppState},
     card_service::CardService,
+    config::Config,
     database::Database,
-    llm_providers::LLMProviderType,
     llm_service::LLMService,
 };
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
     
-    // Initialize comprehensive logging with file output
-    let _guard = setup_logging()?;
+    // Load centralized configuration
+    let config = Config::from_env()?;
+    config.validate()?;
+    
+    // Initialize comprehensive logging with configuration
+    let _guard = setup_logging(&config.logging)?;
 
-    // Load environment variables
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:learning.db".to_string());
-    let llm_api_key = env::var("LLM_API_KEY").unwrap_or_else(|_| "your-api-key".to_string());
-    let llm_base_url = env::var("LLM_BASE_URL").ok();
-    let llm_provider = env::var("LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string());
-    let llm_model = env::var("LLM_MODEL").ok();
-    let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-
-    info!("Starting Learning System server...");
+    log_system_event!(startup, component = "server", "Learning System server starting");
 
     // Initialize database
-    let db = Database::new(&database_url).await?;
-    info!("Database initialized successfully");
+    let db = Database::new(&config.database.url).await?;
+    log_system_event!(startup, component = "database", "Database initialized successfully");
 
     // Initialize services
     let card_service = CardService::new(db);
     
-    // Parse LLM provider configuration
-    let provider_type = match llm_provider.to_lowercase().as_str() {
-        "gemini" | "google" => LLMProviderType::Gemini,
-        "openai" | "chatgpt" | "gpt" => LLMProviderType::OpenAI,
-        _ => {
-            info!("Unknown LLM provider '{}', defaulting to OpenAI", llm_provider);
-            LLMProviderType::OpenAI
-        }
-    };
+    let llm_service = LLMService::new_with_provider(
+        config.llm.api_key.clone(),
+        config.llm.base_url.clone(),
+        config.llm.provider,
+        config.llm.model.clone()
+    );
     
-    let llm_service = LLMService::new_with_provider(llm_api_key, llm_base_url, provider_type, llm_model);
-    
-    info!("Initialized LLM service with provider: {:?}", provider_type);
+    log_system_event!(startup, component = "llm_service", format!("LLM service initialized with provider: {:?}", config.llm.provider).as_str());
 
     // Create application state
     let state = AppState {
@@ -94,8 +87,8 @@ async fn main() -> Result<()> {
         );
 
     // Start the server
-    let addr = format!("0.0.0.0:{}", port);
-    info!("Server starting on {}", addr);
+    let addr = format!("{}:{}", config.server.host, config.server.port);
+    log_system_event!(startup, component = "server", format!("Server starting on {}", addr).as_str());
     
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
@@ -103,78 +96,135 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn serve_index() -> Result<Html<String>, StatusCode> {
-    match fs::read_to_string("static/index.html").await {
-        Ok(content) => Ok(Html(content)),
+async fn serve_static_file(
+    file_path: &str,
+    content_type: &'static str,
+) -> Result<(StatusCode, [(&'static str, &'static str); 1], String), StatusCode> {
+    match fs::read_to_string(file_path).await {
+        Ok(content) => Ok((
+            StatusCode::OK,
+            [("content-type", content_type)],
+            content,
+        )),
         Err(_) => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+async fn serve_index() -> Result<Html<String>, StatusCode> {
+    match serve_static_file("static/index.html", "text/html").await {
+        Ok((_, _, content)) => Ok(Html(content)),
+        Err(status_code) => Err(status_code),
     }
 }
 
 async fn serve_css() -> Result<(StatusCode, [(&'static str, &'static str); 1], String), StatusCode> {
-    match fs::read_to_string("static/styles.css").await {
-        Ok(content) => Ok((
-            StatusCode::OK,
-            [("content-type", "text/css")],
-            content,
-        )),
-        Err(_) => Err(StatusCode::NOT_FOUND),
-    }
+    serve_static_file("static/styles.css", "text/css").await
 }
 
 async fn serve_js() -> Result<(StatusCode, [(&'static str, &'static str); 1], String), StatusCode> {
-    match fs::read_to_string("static/app.js").await {
-        Ok(content) => Ok((
-            StatusCode::OK,
-            [("content-type", "application/javascript")],
-            content,
-        )),
-        Err(_) => Err(StatusCode::NOT_FOUND),
-    }
+    serve_static_file("static/app.js", "application/javascript").await
 }
 
-fn setup_logging() -> Result<WorkerGuard> {
+fn setup_logging(logging_config: &crate::config::LoggingConfig) -> Result<Option<WorkerGuard>> {
     use std::fs;
     use tracing_subscriber::fmt;
 
-    // Create logs directory if it doesn't exist
-    fs::create_dir_all("logs").unwrap_or_else(|e| {
-        eprintln!("Warning: Could not create logs directory: {}", e);
-    });
+    // Create logs directory if file logging is enabled
+    if logging_config.file_enabled {
+        fs::create_dir_all(&logging_config.log_directory).unwrap_or_else(|e| {
+            eprintln!("Warning: Could not create logs directory '{}': {}", logging_config.log_directory, e);
+        });
+    }
 
-    // Configure log level from environment variable
-    let default_log_level = "info,learning_system=debug";
+    // Configure log level from configuration
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_log_level));
+        .unwrap_or_else(|_| EnvFilter::new(&logging_config.level));
 
-    // Set up file appender with daily rotation
-    let file_appender = tracing_appender::rolling::daily("logs", "learning-system.log");
-    let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
+    // Handle different combinations of console and file logging
+    let guard = match (logging_config.console_enabled, logging_config.file_enabled) {
+        (true, true) => {
+            // Both console and file logging enabled
+            let file_appender = tracing_appender::rolling::daily(&logging_config.log_directory, "learning-system.log");
+            let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
 
-    // Configure console output
-    let console_layer = fmt::layer()
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_ansi(true);
+            let console_layer = fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_ansi(true);
 
-    // Configure file output (no ANSI colors for files)
-    let file_layer = fmt::layer()
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_ansi(false)
-        .with_writer(non_blocking_file);
+            let file_layer = fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_ansi(false)
+                .with_writer(non_blocking_file);
 
-    // Initialize subscriber with both console and file outputs
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(console_layer)
-        .with(file_layer)
-        .init();
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(console_layer)
+                .with(file_layer)
+                .init();
+                
+            Some(guard)
+        }
+        (true, false) => {
+            // Console logging only
+            let console_layer = fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_ansi(true);
 
-    info!("Logging initialized - writing to logs/learning-system.log with daily rotation");
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(console_layer)
+                .init();
+                
+            None
+        }
+        (false, true) => {
+            // File logging only
+            let file_appender = tracing_appender::rolling::daily(&logging_config.log_directory, "learning-system.log");
+            let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
+
+            let file_layer = fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_ansi(false)
+                .with_writer(non_blocking_file);
+
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(file_layer)
+                .init();
+                
+            Some(guard)
+        }
+        (false, false) => {
+            // No logging configured - use minimal console
+            eprintln!("Warning: Both console and file logging are disabled. Enabling minimal console logging.");
+            let console_layer = fmt::layer().compact();
+
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(console_layer)
+                .init();
+                
+            None
+        }
+    };
+
+    if logging_config.file_enabled {
+        log_system_event!(config, format!("Logging initialized - writing to {}/learning-system.log with daily rotation", logging_config.log_directory).as_str());
+    } else {
+        log_system_event!(config, "Logging initialized - console output only");
+    }
     
     Ok(guard)
 }

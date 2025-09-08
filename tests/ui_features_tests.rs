@@ -1,6 +1,7 @@
 use axum_test::TestServer;
 use serde_json::{json, Value};
-use learning_system::{api::*, CardService, Database, LLMService, LLMProvider};
+use learning_system::{api::*, CardService, Database, LLMService};
+use learning_system::llm_providers::LLMProviderType;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -18,7 +19,7 @@ async fn create_test_server() -> TestServer {
     TestServer::new(app).unwrap()
 }
 
-async fn create_test_server_with_provider(provider: LLMProvider) -> TestServer {
+async fn create_test_server_with_provider(provider: LLMProviderType) -> TestServer {
     let db = Database::new("sqlite::memory:").await.unwrap();
     let card_service = CardService::new(db);
     let llm_service = LLMService::new_with_provider(
@@ -404,8 +405,8 @@ async fn test_server_creation_with_multiple_providers() {
     // Test that the server can be created with different LLM providers
     
     let providers = vec![
-        ("OpenAI", LLMProvider::OpenAI),
-        ("Gemini", LLMProvider::Gemini),
+        ("OpenAI", LLMProviderType::OpenAI),
+        ("Gemini", LLMProviderType::Gemini),
     ];
     
     for (name, provider) in providers {
@@ -429,8 +430,8 @@ async fn test_provider_specific_card_operations() {
     // Test that both providers support the same card operations
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {
@@ -464,8 +465,8 @@ async fn test_api_consistency_across_providers() {
     // regardless of which LLM provider is used
     
     let providers = vec![
-        LLMProvider::OpenAI,
-        LLMProvider::Gemini,
+        LLMProviderType::OpenAI,
+        LLMProviderType::Gemini,
     ];
     
     for provider in providers {

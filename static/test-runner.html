@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Test Runner - Learning System</title>
+    <style>
+        body { 
+            font-family: monospace; 
+            margin: 20px; 
+            background: #1e1e1e; 
+            color: #d4d4d4; 
+        }
+        .test-suite { 
+            margin-bottom: 20px; 
+            border: 1px solid #3c3c3c; 
+            border-radius: 4px; 
+            padding: 15px; 
+        }
+        .test-suite h2 { 
+            margin: 0 0 10px 0; 
+            color: #4ec9b0; 
+        }
+        .test-case { 
+            margin: 5px 0; 
+            padding: 3px 8px; 
+            border-radius: 2px; 
+        }
+        .test-case.pass { 
+            background: #0e5a0e; 
+            color: #4fc14f; 
+        }
+        .test-case.fail { 
+            background: #5a0e0e; 
+            color: #f14c4c; 
+        }
+        .test-case.pending { 
+            background: #5a5a0e; 
+            color: #f1f14c; 
+        }
+        .summary { 
+            margin-top: 20px; 
+            padding: 15px; 
+            border: 2px solid #4ec9b0; 
+            border-radius: 4px; 
+        }
+        .error-details {
+            margin-top: 10px;
+            padding: 10px;
+            background: #3c1e1e;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        #run-tests {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        #run-tests:hover {
+            background: #106ba3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Frontend Test Runner</h1>
+    <button id="run-tests">Run All Tests</button>
+    <div id="test-output"></div>
+    
+    <!-- Load testing framework -->
+    <script src="tests/test-framework.js"></script>
+    
+    <!-- Load utilities -->
+    <script src="tests/test-utils.js"></script>
+    
+    <!-- Load source files (simplified versions for testing) -->
+    <script src="tests/mocks/dom-mock.js"></script>
+    
+    <!-- Load test files -->
+    <script src="tests/learning-system.test.js"></script>
+    <script src="tests/wiki-links.test.js"></script>
+    <script src="tests/search.test.js"></script>
+    <script src="tests/review-session.test.js"></script>
+    <script src="tests/integration.test.js"></script>
+    
+    <script>
+        document.getElementById('run-tests').addEventListener('click', () => {
+            TestRunner.runAllTests();
+        });
+        
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => TestRunner.runAllTests(), 100);
+        });
+    </script>
+</body>
+</html>
