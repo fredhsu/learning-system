@@ -18,6 +18,14 @@ impl Database {
         Ok(db)
     }
 
+    #[cfg(test)]
+    pub async fn new_in_memory() -> Result<Self> {
+        let pool = SqlitePool::connect(":memory:").await?;
+        let db = Database { pool };
+        db.migrate().await?;
+        Ok(db)
+    }
+
     async fn migrate(&self) -> Result<()> {
         sqlx::query(
             r#"

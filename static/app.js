@@ -18,6 +18,12 @@ class LearningSystem {
         };
         this.cardCache = new Map(); // Cache for link preview data
         this.previewTimeouts = new Map(); // Track delayed loading states
+        
+        // Phase 2: Parallel processing configuration
+        this.parallelProcessingMode = 'auto'; // 'auto', 'parallel', 'batch', 'sequential'
+        this.maxConcurrentTasks = 5; // Default concurrency limit
+        this.processingMetrics = null; // Store latest metrics
+        
         this.init();
     }
 
@@ -977,7 +983,48 @@ class LearningSystem {
         const { card, questions } = this.currentQuiz;
         
         // Collect all answers
+        const answers = this.collectAllAnswers();
+        
+        if (!answers) {
+            this.showError('Please answer all questions before submitting');
+            return;
+        }
+
+        // Disable submit button to prevent double submission
+        const submitButton = document.querySelector('.batch-submit-container .primary-btn');
+        submitButton.disabled = true;
+        submitButton.textContent = 'Processing...';
+
+        try {
+            // Try parallel processing first, with fallback chain
+            const result = await this.submitAnswersWithProcessingMode(answers, card);
+            
+            console.log('Processing result:', result);
+            console.log('Processing metrics:', result.metrics);
+
+            // Store metrics for performance monitoring
+            this.processingMetrics = result.metrics;
+
+            // Show feedback for all questions
+            try {
+                this.showBatchFeedbackWithMetrics(result, questions);
+            } catch (feedbackError) {
+                console.error('Error in showBatchFeedback:', feedbackError);
+                this.showError('Failed to display grading results');
+            }
+        } catch (error) {
+            console.error('Failed to submit answers:', error);
+            this.showError('Failed to submit answers');
+            // Re-enable button on error
+            submitButton.disabled = false;
+            submitButton.textContent = 'Submit All Answers';
+        }
+    }
+
+    // Collect all answers from the form
+    collectAllAnswers() {
         const answers = [];
+        const questions = this.currentQuiz.questions;
         let allAnswered = true;
         
         for (let i = 0; i < questions.length; i++) {
@@ -1003,21 +1050,100 @@ class LearningSystem {
             answers.push(answer);
         }
         
-        if (!allAnswered) {
-            this.showError('Please answer all questions before submitting');
-            return;
+        return allAnswered ? answers : null;
+    }
+
+    // Submit answers with automatic processing mode selection
+    async submitAnswersWithProcessingMode(answers, card) {
+        const startTime = performance.now();
+        
+        // Determine processing mode
+        const processingMode = this.determineProcessingMode(answers.length);
+        
+        console.log(`Using processing mode: ${processingMode} for ${answers.length} answers`);
+        
+        // Try parallel processing first (Phase 2)
+        if (processingMode === 'parallel' || processingMode === 'auto') {
+            try {
+                const parallelResult = await this.submitParallelAnswers(answers, card);
+                const endTime = performance.now();
+                
+                console.log(`Parallel processing completed in ${endTime - startTime}ms`);
+                return parallelResult;
+            } catch (parallelError) {
+                console.warn('Parallel processing failed, falling back to batch:', parallelError);
+            }
         }
-
-        // Disable submit button to prevent double submission
-        const submitButton = document.querySelector('.batch-submit-container .primary-btn');
-        submitButton.disabled = true;
-        submitButton.textContent = 'Submitting...';
-
+        
+        // Fallback to batch processing (Phase 1)
         try {
-            // Submit all answers at once
-            const results = [];
+            const batchResult = await this.submitBatchAnswers(answers, card);
+            const endTime = performance.now();
             
-            for (let i = 0; i < questions.length; i++) {
+            console.log(`Batch processing completed in ${endTime - startTime}ms`);
+            return batchResult;
+        } catch (batchError) {
+            console.warn('Batch processing failed, falling back to sequential:', batchError);
+            
+            // Final fallback: sequential processing
+            return await this.submitSequentialAnswers(answers, card);
+        }
+    }
+
+    // Determine optimal processing mode based on question count and browser capabilities
+    determineProcessingMode(questionCount) {
+        if (this.parallelProcessingMode !== 'auto') {
+            return this.parallelProcessingMode;
+        }
+        
+        // Auto-select based on question count
+        if (questionCount >= 3) {
+            return 'parallel'; // Parallel processing beneficial for 3+ questions
+        } else if (questionCount >= 2) {
+            return 'batch'; // Batch processing for 2 questions
+        } else {
+            return 'sequential'; // Single question uses sequential
+        }
+    }
+
+    // Phase 2: Submit answers using parallel processing
+    async submitParallelAnswers(answers, card) {
+        const parallelRequest = {
+            answers: answers.map((answer, index) => ({
+                question_index: index,
+                answer: answer
+            })),
+            processing_mode: 'parallel',
+            max_concurrent_tasks: this.maxConcurrentTasks
+        };
+
+        return await this.apiCall(`/review/session/${this.reviewSession.sessionId}/answers/${card.id}/parallel`, {
+            method: 'POST',
+            body: JSON.stringify(parallelRequest)
+        });
+    }
+
+    // Phase 1: Submit answers using batch processing
+    async submitBatchAnswers(answers, card) {
+        const batchRequest = {
+            answers: answers.map((answer, index) => ({
+                question_index: index,
+                answer: answer
+            }))
+        };
+
+        return await this.apiCall(`/review/session/${this.reviewSession.sessionId}/answers/${card.id}/batch`, {
+            method: 'POST',
+            body: JSON.stringify(batchRequest)
+        });
+    }
+
+    // Final fallback: Submit answers sequentially (legacy mode)
+    async submitSequentialAnswers(answers, card) {
+        const results = [];
+        
+        for (let i = 0; i < answers.length; i++) {
+            try {
                 const result = await this.apiCall(`/review/session/${this.reviewSession.sessionId}/answer/${card.id}`, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -1025,17 +1151,32 @@ class LearningSystem {
                         answer: answers[i]
                     })
                 });
-                results.push(result);
+                
+                results.push({
+                    question_id: (i + 1).toString(),
+                    is_correct: result.data.is_correct,
+                    feedback: result.data.feedback,
+                    suggested_rating: result.data.suggested_rating
+                });
+            } catch (error) {
+                console.error(`Sequential submission failed for question ${i}:`, error);
+                results.push({
+                    question_id: (i + 1).toString(),
+                    is_correct: false,
+                    feedback: "Failed to grade this answer due to technical issues.",
+                    suggested_rating: 2
+                });
             }
-
-            // Show feedback for all questions
-            this.showBatchFeedback(results, questions);
-        } catch (error) {
-            this.showError('Failed to submit answers');
-            // Re-enable button on error
-            submitButton.disabled = false;
-            submitButton.textContent = 'Submit All Answers';
         }
+        
+        return {
+            success: true,
+            data: results,
+            metrics: {
+                processing_mode_used: 'sequential_fallback',
+                fallback_reason: 'Both parallel and batch processing failed'
+            }
+        };
     }
 
     async submitAnswer() {
@@ -1044,6 +1185,20 @@ class LearningSystem {
     }
 
     showBatchFeedback(results, questions) {
+        console.log('showBatchFeedback called with results:', results, 'questions:', questions);
+        
+        if (!results) {
+            console.error('No results provided to showBatchFeedback');
+            this.showError('No grading results received');
+            return;
+        }
+        
+        if (!questions) {
+            console.error('No questions provided to showBatchFeedback');
+            this.showError('No questions available for feedback');
+            return;
+        }
+        
         const feedbackContainer = document.getElementById('quiz-feedback');
         
         // Update statistics for all questions
@@ -1101,7 +1256,7 @@ class LearningSystem {
         }
         
         // Store individual ratings for averaging (fallback to suggested rating)
-        this.currentQuiz.questionRatings = results.map(result => result.rating || suggestedRating);
+        this.currentQuiz.questionRatings = results.map(result => result.suggested_rating || suggestedRating);
         
         // Create rating name helper function
         const getRatingName = (rating) => {
@@ -1150,6 +1305,127 @@ class LearningSystem {
                 </div>
             </div>
         `;
+    }
+
+    // Enhanced feedback display with performance metrics
+    showBatchFeedbackWithMetrics(result, questions) {
+        // Extract data from either parallel or batch response format
+        const results = result.data || result;
+        const metrics = result.metrics;
+        
+        // Call the existing feedback display
+        this.showBatchFeedback(results, questions);
+        
+        // Add performance metrics if available
+        if (metrics) {
+            this.displayPerformanceMetrics(metrics);
+        }
+    }
+
+    // Display performance metrics from parallel processing
+    displayPerformanceMetrics(metrics) {
+        const feedbackContainer = document.getElementById('quiz-feedback');
+        
+        // Create metrics display
+        const metricsHTML = `
+            <div class="performance-metrics">
+                <h5>Performance Metrics</h5>
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <label>Processing Mode:</label>
+                        <span class="metric-value mode-${metrics.processing_mode_used}">${this.formatProcessingMode(metrics.processing_mode_used)}</span>
+                    </div>
+                    <div class="metric">
+                        <label>Total Time:</label>
+                        <span class="metric-value">${metrics.total_processing_time_ms}ms</span>
+                    </div>
+                    ${metrics.parallel_tasks_spawned > 0 ? `
+                        <div class="metric">
+                            <label>Concurrent Tasks:</label>
+                            <span class="metric-value">${metrics.parallel_tasks_spawned}</span>
+                        </div>
+                        <div class="metric">
+                            <label>Avg Task Time:</label>
+                            <span class="metric-value">${metrics.average_task_duration_ms}ms</span>
+                        </div>
+                    ` : ''}
+                    ${metrics.fallback_reason ? `
+                        <div class="metric fallback-reason">
+                            <label>Note:</label>
+                            <span class="metric-value">${metrics.fallback_reason}</span>
+                        </div>
+                    ` : ''}
+                </div>
+                ${this.shouldShowPerformanceComparison(metrics) ? this.createPerformanceComparison(metrics) : ''}
+            </div>
+        `;
+        
+        // Insert metrics before rating buttons
+        const ratingButtons = feedbackContainer.querySelector('.rating-buttons');
+        if (ratingButtons) {
+            ratingButtons.insertAdjacentHTML('beforebegin', metricsHTML);
+        }
+    }
+
+    // Format processing mode for display
+    formatProcessingMode(mode) {
+        const modeNames = {
+            'parallel': 'Parallel Processing',
+            'batch_fallback': 'Batch Processing (Fallback)',
+            'sequential_fallback': 'Sequential Processing (Fallback)',
+            'batch': 'Batch Processing',
+            'sequential': 'Sequential Processing'
+        };
+        return modeNames[mode] || mode;
+    }
+
+    // Check if we should show performance comparison
+    shouldShowPerformanceComparison(metrics) {
+        return metrics.processing_mode_used === 'parallel' && metrics.parallel_tasks_spawned >= 3;
+    }
+
+    // Create performance comparison visualization
+    createPerformanceComparison(metrics) {
+        const estimatedSequentialTime = metrics.parallel_tasks_spawned * metrics.average_task_duration_ms;
+        const actualTime = metrics.total_processing_time_ms;
+        const improvement = ((estimatedSequentialTime - actualTime) / estimatedSequentialTime * 100).toFixed(1);
+        
+        return `
+            <div class="performance-comparison">
+                <h6>Performance Impact</h6>
+                <div class="comparison-bar">
+                    <div class="bar-segment sequential" style="width: 100%">
+                        <span>Estimated Sequential: ${estimatedSequentialTime}ms</span>
+                    </div>
+                    <div class="bar-segment parallel" style="width: ${(actualTime / estimatedSequentialTime * 100).toFixed(1)}%">
+                        <span>Actual Parallel: ${actualTime}ms</span>
+                    </div>
+                </div>
+                <p class="improvement-text">
+                    <strong>${improvement}% faster</strong> than sequential processing
+                </p>
+            </div>
+        `;
+    }
+
+    // Settings methods for parallel processing configuration
+    setProcessingMode(mode) {
+        this.parallelProcessingMode = mode;
+        console.log(`Processing mode set to: ${mode}`);
+    }
+
+    setConcurrencyLimit(limit) {
+        this.maxConcurrentTasks = Math.max(1, Math.min(10, limit));
+        console.log(`Concurrency limit set to: ${this.maxConcurrentTasks}`);
+    }
+
+    // Get current processing configuration
+    getProcessingConfig() {
+        return {
+            processingMode: this.parallelProcessingMode,
+            maxConcurrentTasks: this.maxConcurrentTasks,
+            lastMetrics: this.processingMetrics
+        };
     }
 
     showFeedback(grading, question) {

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Grading Tests</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-runner {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        .test-pass {
+            background: #f0f9f0;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .test-fail {
+            background: #f9f0f0;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .test-pending {
+            background: #f0f8ff;
+            border-color: #007bff;
+            color: #004085;
+        }
+        .summary {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin: 20px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .error-details {
+            font-family: monospace;
+            font-size: 0.9em;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+        .mock-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="mock-notice">
+        <strong>Note:</strong> These tests verify the frontend batch grading functionality. 
+        The backend endpoints are mocked for testing purposes.
+    </div>
+
+    <div class="test-runner">
+        <h1>Batch Grading Frontend Tests</h1>
+        <button onclick="runAllTests()">Run All Tests</button>
+        <button onclick="clearResults()">Clear Results</button>
+        
+        <div class="summary" id="test-summary">
+            Ready to run tests
+        </div>
+        
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        // Mock API responses for testing
+        const mockApiResponses = {
+            '/api/review/session/test-session/answers/test-card/batch': {
+                success: true,
+                data: [
+                    {
+                        question_id: "1",
+                        is_correct: true,
+                        feedback: "Excellent answer! You understood the concept perfectly.",
+                        suggested_rating: 4
+                    },
+                    {
+                        question_id: "2",
+                        is_correct: false,
+                        feedback: "Close, but you missed a key detail. Review the material again.",
+                        suggested_rating: 2
+                    }
+                ]
+            },
+            '/api/review/session/invalid-session/answers/test-card/batch': {
+                error: 'Session not found',
+                status: 404
+            }
+        };
+
+        // Mock application instance for testing
+        const mockApp = {
+            currentQuiz: {
+                card: {
+                    id: 'test-card',
+                    zettel_id: 'TEST001',
+                    title: 'Test Card',
+                    content: 'Test card content for batch grading'
+                },
+                questions: [
+                    {
+                        question: "What is the main concept?",
+                        question_type: "short_answer",
+                        correct_answer: "Main concept"
+                    },
+                    {
+                        question: "Choose the correct option",
+                        question_type: "multiple_choice",
+                        options: ["A) Option 1", "B) Option 2"],
+                        correct_answer: "A) Option 1"
+                    }
+                ]
+            },
+            reviewSession: {
+                sessionId: 'test-session',
+                totalQuestions: 0,
+                correctAnswers: 0
+            },
+
+            async apiCall(endpoint, options = {}) {
+                // Simulate network delay
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                if (mockApiResponses[endpoint] && mockApiResponses[endpoint].error) {
+                    const error = new Error(mockApiResponses[endpoint].error);
+                    error.status = mockApiResponses[endpoint].status;
+                    throw error;
+                }
+                
+                return mockApiResponses[endpoint] || { success: false, error: 'Not mocked' };
+            },
+
+            showError(message) {
+                console.log('Error:', message);
+            },
+
+            updateProgressIndicators() {
+                // Mock implementation
+            },
+
+            // Method under test - batch submission
+            async submitAllAnswersBatch() {
+                const { card, questions } = this.currentQuiz;
+                
+                // Collect all answers
+                const answers = [];
+                let allAnswered = true;
+                
+                for (let i = 0; i < questions.length; i++) {
+                    const question = questions[i];
+                    let answer = null;
+                    
+                    if (question.question_type === 'multiple_choice') {
+                        const selectedOption = document.querySelector(`[data-question-index="${i}"].option.selected`);
+                        if (!selectedOption) {
+                            allAnswered = false;
+                            break;
+                        }
+                        answer = selectedOption.dataset.optionText;
+                    } else {
+                        const textField = document.querySelector(`[data-question-index="${i}"].short-answer`);
+                        if (!textField || !textField.value.trim()) {
+                            allAnswered = false;
+                            break;
+                        }
+                        answer = textField.value.trim();
+                    }
+                    
+                    answers.push(answer);
+                }
+                
+                if (!allAnswered) {
+                    this.showError('Please answer all questions before submitting');
+                    return null;
+                }
+
+                const batchRequest = {
+                    answers: answers.map((answer, index) => ({
+                        question_index: index,
+                        answer: answer
+                    }))
+                };
+
+                try {
+                    const result = await this.apiCall(
+                        `/review/session/${this.reviewSession.sessionId}/answers/${card.id}/batch`,
+                        {
+                            method: 'POST',
+                            body: JSON.stringify(batchRequest)
+                        }
+                    );
+                    
+                    return result;
+                } catch (error) {
+                    this.showError('Failed to submit batch answers');
+                    throw error;
+                }
+            }
+        };
+
+        // Test framework
+        let testResults = [];
+        let currentTest = null;
+
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message || 'Assertion failed');
+            }
+        }
+
+        function assertEqual(actual, expected, message) {
+            if (actual !== expected) {
+                throw new Error(message || `Expected ${expected}, got ${actual}`);
+            }
+        }
+
+        function assertArrayLength(array, expectedLength, message) {
+            if (!Array.isArray(array) || array.length !== expectedLength) {
+                throw new Error(message || `Expected array of length ${expectedLength}, got ${array?.length || 'not an array'}`);
+            }
+        }
+
+        async function test(name, testFn) {
+            currentTest = { name, status: 'running', error: null };
+            updateTestDisplay();
+            
+            try {
+                await testFn();
+                currentTest.status = 'pass';
+                testResults.push({ ...currentTest });
+            } catch (error) {
+                currentTest.status = 'fail';
+                currentTest.error = error.message;
+                testResults.push({ ...currentTest });
+            }
+            
+            updateTestDisplay();
+        }
+
+        function createMockDOM(questionsData) {
+            // Clear existing mock elements
+            document.querySelectorAll('.mock-question').forEach(el => el.remove());
+            
+            // Create mock DOM elements for questions
+            questionsData.forEach((question, index) => {
+                const container = document.createElement('div');
+                container.className = 'mock-question';
+                container.style.display = 'none'; // Hidden from view
+                
+                if (question.question_type === 'multiple_choice') {
+                    question.options.forEach((option, optionIndex) => {
+                        const optionElement = document.createElement('div');
+                        optionElement.className = 'option';
+                        optionElement.dataset.questionIndex = index;
+                        optionElement.dataset.optionText = option;
+                        if (optionIndex === 0) {
+                            optionElement.classList.add('selected'); // Select first option by default
+                        }
+                        container.appendChild(optionElement);
+                    });
+                } else {
+                    const input = document.createElement('input');
+                    input.className = 'short-answer';
+                    input.dataset.questionIndex = index;
+                    input.value = question.correct_answer; // Pre-fill with correct answer for testing
+                    container.appendChild(input);
+                }
+                
+                document.body.appendChild(container);
+            });
+        }
+
+        async function runAllTests() {
+            testResults = [];
+            updateTestDisplay();
+
+            // Test 1: Successful batch submission
+            await test('Batch submission with valid answers', async () => {
+                createMockDOM(mockApp.currentQuiz.questions);
+                
+                const result = await mockApp.submitAllAnswersBatch();
+                
+                assert(result.success, 'Should return successful result');
+                assert(result.data, 'Should have data property');
+                assertArrayLength(result.data, 2, 'Should return results for 2 questions');
+                
+                assertEqual(result.data[0].question_id, "1", 'First result should have question_id "1"');
+                assertEqual(result.data[1].question_id, "2", 'Second result should have question_id "2"');
+                
+                assert(typeof result.data[0].is_correct === 'boolean', 'Should have boolean is_correct');
+                assert(typeof result.data[0].feedback === 'string', 'Should have string feedback');
+                assert(typeof result.data[0].suggested_rating === 'number', 'Should have numeric suggested_rating');
+            });
+
+            // Test 2: Batch request structure validation
+            await test('Batch request structure validation', async () => {
+                createMockDOM(mockApp.currentQuiz.questions);
+                
+                // Mock the apiCall to capture the request
+                let capturedRequest = null;
+                const originalApiCall = mockApp.apiCall;
+                mockApp.apiCall = async (endpoint, options) => {
+                    capturedRequest = JSON.parse(options.body);
+                    return originalApiCall.call(mockApp, endpoint, options);
+                };
+                
+                await mockApp.submitAllAnswersBatch();
+                
+                // Restore original apiCall
+                mockApp.apiCall = originalApiCall;
+                
+                assert(capturedRequest, 'Should capture request data');
+                assert(capturedRequest.answers, 'Should have answers array');
+                assertArrayLength(capturedRequest.answers, 2, 'Should have 2 answers');
+                
+                assertEqual(capturedRequest.answers[0].question_index, 0, 'First answer should have index 0');
+                assertEqual(capturedRequest.answers[1].question_index, 1, 'Second answer should have index 1');
+                
+                assert(typeof capturedRequest.answers[0].answer === 'string', 'Answer should be string');
+                assert(typeof capturedRequest.answers[1].answer === 'string', 'Answer should be string');
+            });
+
+            // Test 3: Missing answers validation
+            await test('Missing answers validation', async () => {
+                // Create DOM with empty answers
+                const questionsData = mockApp.currentQuiz.questions.map(q => ({ ...q, correct_answer: '' }));
+                createMockDOM(questionsData);
+                
+                // Clear the input values to simulate missing answers
+                document.querySelectorAll('.short-answer').forEach(input => {
+                    input.value = '';
+                });
+                
+                const result = await mockApp.submitAllAnswersBatch();
+                
+                assertEqual(result, null, 'Should return null when answers are missing');
+            });
+
+            // Test 4: API error handling
+            await test('API error handling', async () => {
+                createMockDOM(mockApp.currentQuiz.questions);
+                
+                // Switch to invalid session to trigger error
+                const originalSessionId = mockApp.reviewSession.sessionId;
+                mockApp.reviewSession.sessionId = 'invalid-session';
+                
+                try {
+                    await mockApp.submitAllAnswersBatch();
+                    assert(false, 'Should have thrown an error');
+                } catch (error) {
+                    assert(error.message.includes('Failed to submit batch answers'), 'Should show appropriate error message');
+                } finally {
+                    // Restore original session ID
+                    mockApp.reviewSession.sessionId = originalSessionId;
+                }
+            });
+
+            // Test 5: Mixed question types handling
+            await test('Mixed question types handling', async () => {
+                createMockDOM(mockApp.currentQuiz.questions);
+                
+                const result = await mockApp.submitAllAnswersBatch();
+                
+                assert(result.success, 'Should handle mixed question types');
+                assertArrayLength(result.data, 2, 'Should return results for both question types');
+                
+                // Verify that both short answer and multiple choice were processed
+                const questionIds = result.data.map(r => r.question_id);
+                assert(questionIds.includes("1"), 'Should process short answer question');
+                assert(questionIds.includes("2"), 'Should process multiple choice question');
+            });
+
+            // Test 6: Performance simulation
+            await test('Batch vs sequential performance simulation', async () => {
+                createMockDOM(mockApp.currentQuiz.questions);
+                
+                const batchStartTime = performance.now();
+                await mockApp.submitAllAnswersBatch();
+                const batchEndTime = performance.now();
+                const batchTime = batchEndTime - batchStartTime;
+                
+                // Simulate sequential calls
+                const sequentialStartTime = performance.now();
+                for (let i = 0; i < mockApp.currentQuiz.questions.length; i++) {
+                    await mockApp.apiCall('/api/mock/individual', {});
+                }
+                const sequentialEndTime = performance.now();
+                const sequentialTime = sequentialEndTime - sequentialStartTime;
+                
+                assert(batchTime < sequentialTime, 'Batch should be faster than sequential (with mocked delays)');
+            });
+
+            // Test 7: Answer ordering preservation
+            await test('Answer ordering preservation', async () => {
+                createMockDOM(mockApp.currentQuiz.questions);
+                
+                const result = await mockApp.submitAllAnswersBatch();
+                
+                // Results should be ordered by question_id
+                for (let i = 0; i < result.data.length; i++) {
+                    assertEqual(result.data[i].question_id, (i + 1).toString(), 
+                        `Result at index ${i} should have question_id ${i + 1}`);
+                }
+            });
+
+            // Test 8: Empty quiz handling
+            await test('Empty quiz handling', async () => {
+                // Mock empty quiz
+                const originalQuestions = mockApp.currentQuiz.questions;
+                mockApp.currentQuiz.questions = [];
+                createMockDOM([]);
+                
+                try {
+                    const result = await mockApp.submitAllAnswersBatch();
+                    assertEqual(result, null, 'Should return null for empty quiz');
+                } finally {
+                    // Restore original questions
+                    mockApp.currentQuiz.questions = originalQuestions;
+                }
+            });
+
+            updateSummary();
+        }
+
+        function updateTestDisplay() {
+            const resultsDiv = document.getElementById('test-results');
+            
+            let html = '';
+            testResults.forEach(test => {
+                const cssClass = `test-${test.status}`;
+                html += `
+                    <div class="${cssClass} test-result">
+                        <strong>${test.name}</strong>: ${test.status.toUpperCase()}
+                        ${test.error ? `<div class="error-details">${test.error}</div>` : ''}
+                    </div>
+                `;
+            });
+            
+            if (currentTest && currentTest.status === 'running') {
+                html += `
+                    <div class="test-pending test-result">
+                        <strong>${currentTest.name}</strong>: RUNNING...
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+
+        function updateSummary() {
+            const summaryDiv = document.getElementById('test-summary');
+            const total = testResults.length;
+            const passed = testResults.filter(t => t.status === 'pass').length;
+            const failed = testResults.filter(t => t.status === 'fail').length;
+            
+            summaryDiv.innerHTML = `
+                Tests completed: ${total} | 
+                Passed: <span style="color: #28a745">${passed}</span> | 
+                Failed: <span style="color: #dc3545">${failed}</span>
+                ${total > 0 ? `| Success rate: ${Math.round((passed/total) * 100)}%` : ''}
+            `;
+        }
+
+        function clearResults() {
+            testResults = [];
+            currentTest = null;
+            document.getElementById('test-results').innerHTML = '';
+            document.getElementById('test-summary').innerHTML = 'Ready to run tests';
+        }
+
+        // Auto-run tests on page load for demonstration
+        window.addEventListener('load', () => {
+            console.log('Batch Grading Frontend Tests loaded');
+            console.log('Click "Run All Tests" to execute the test suite');
+        });
+    </script>
+</body>
+</html>

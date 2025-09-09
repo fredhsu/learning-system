@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+use futures_util::future;
 
 use crate::llm_providers::{LLMProvider, LLMProviderFactory, LLMProviderType, JsonResponseParser};
 use crate::models::{BatchGradingRequest, BatchGradingResult, Card, QuizQuestion};
@@ -84,6 +85,47 @@ impl LLMService {
     /// Get the model name being used
     pub fn model_name(&self) -> &str {
         self.provider.model_name()
+    }
+
+    #[cfg(test)]
+    pub fn new_mock() -> Self {
+        Self::new_mock_internal(true, false)
+    }
+
+    #[cfg(test)]
+    pub fn new_mock_with_incorrect_answers() -> Self {
+        Self::new_mock_internal(false, false)
+    }
+
+    #[cfg(test)]
+    pub fn new_mock_with_batch_failure() -> Self {
+        Self::new_mock_internal(true, true)
+    }
+
+    #[cfg(test)]
+    pub fn new_mock_with_mixed_results() -> Self {
+        use crate::llm_providers::{MockProvider};
+        
+        let provider = LLMProvider::Mock(MockProvider::new_mixed());
+        let json_parser = JsonResponseParser::new();
+        
+        Self {
+            provider,
+            json_parser,
+        }
+    }
+
+    #[cfg(test)]
+    fn new_mock_internal(correct_answers: bool, batch_fails: bool) -> Self {
+        use crate::llm_providers::{MockProvider};
+        
+        let provider = LLMProvider::Mock(MockProvider::new(correct_answers, batch_fails));
+        let json_parser = JsonResponseParser::new();
+        
+        Self {
+            provider,
+            json_parser,
+        }
     }
 
     pub async fn generate_quiz_questions(&self, card: &Card) -> Result<Vec<QuizQuestion>> {
@@ -522,7 +564,17 @@ Focus on conceptual understanding rather than exact text matching."#,
         );
 
         let system_message = "You are an expert teacher focused on fair, understanding-based grading. Prioritize semantic meaning over exact text matching. Accept equivalent answers that demonstrate understanding. Always respond with valid JSON array in the requested format.";
-        let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
+        let response_text = match self.make_llm_request_with_system(Some(system_message), &prompt).await {
+            Ok(text) => text,
+            Err(e) => {
+                error!(
+                    request_count = grading_requests.len(),
+                    error = %e,
+                    "Batch grading LLM request failed, falling back to individual grading"
+                );
+                return self.fallback_to_individual_grading(grading_requests).await;
+            }
+        };
 
         debug!(
             request_count = grading_requests.len(),
@@ -612,5 +664,251 @@ Focus on conceptual understanding rather than exact text matching."#,
             }
         }
         Ok(results)
+    }
+
+    // Phase 2: Concurrent individual grading methods
+    
+    /// Grade answers using true parallel processing with concurrent individual LLM calls
+    pub async fn grade_answers_concurrently(
+        &self,
+        card: &Card,
+        questions_and_answers: Vec<(QuizQuestion, String)>,
+        max_concurrent_tasks: Option<usize>,
+    ) -> Result<Vec<BatchGradingResult>> {
+        if questions_and_answers.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let max_concurrent = max_concurrent_tasks.unwrap_or(5); // Default to 5 concurrent tasks
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
+        
+        info!(
+            card_id = %card.id,
+            question_count = questions_and_answers.len(),
+            max_concurrent = max_concurrent,
+            "Starting concurrent answer grading"
+        );
+
+        let mut tasks = Vec::new();
+        
+        for (index, (question, answer)) in questions_and_answers.into_iter().enumerate() {
+            let service = self.clone();
+            let card_clone = card.clone();
+            let question_clone = question.clone();
+            let answer_clone = answer.clone();
+            let semaphore_clone = semaphore.clone();
+            
+            let task = tokio::spawn(async move {
+                let _permit = semaphore_clone.acquire().await.unwrap();
+                
+                let start_time = std::time::Instant::now();
+                let result = service.grade_answer(&card_clone, &question_clone, &answer_clone).await;
+                let duration = start_time.elapsed();
+                
+                match result {
+                    Ok(grading_result) => {
+                        debug!(
+                            question_index = index,
+                            duration_ms = duration.as_millis() as u64,
+                            is_correct = grading_result.is_correct,
+                            "Concurrent grading task completed successfully"
+                        );
+                        
+                        Ok((index, BatchGradingResult {
+                            question_id: (index + 1).to_string(),
+                            is_correct: grading_result.is_correct,
+                            feedback: grading_result.feedback,
+                            suggested_rating: grading_result.suggested_rating,
+                        }, duration))
+                    }
+                    Err(e) => {
+                        error!(
+                            question_index = index,
+                            error = %e,
+                            duration_ms = duration.as_millis() as u64,
+                            "Concurrent grading task failed"
+                        );
+                        Err((index, e))
+                    }
+                }
+            });
+            
+            tasks.push(task);
+        }
+
+        // Wait for all concurrent tasks to complete
+        let task_results = future::join_all(tasks).await;
+        
+        let mut results = Vec::new();
+        let mut errors = Vec::new();
+        let mut durations = Vec::new();
+        
+        for task_result in task_results {
+            match task_result {
+                Ok(Ok((index, batch_result, duration))) => {
+                    results.push((index, batch_result));
+                    durations.push(duration);
+                }
+                Ok(Err((index, error))) => {
+                    errors.push((index, error));
+                }
+                Err(join_error) => {
+                    error!(error = %join_error, "Task join error in concurrent grading");
+                    return Err(anyhow::anyhow!("Concurrent grading failed: {}", join_error));
+                }
+            }
+        }
+        
+        // Handle any errors by providing default responses
+        for (index, error) in errors {
+            warn!(
+                question_index = index,
+                error = %error,
+                "Providing default response for failed concurrent grading task"
+            );
+            
+            results.push((index, BatchGradingResult {
+                question_id: (index + 1).to_string(),
+                is_correct: false,
+                feedback: "Unable to grade this answer due to technical issues.".to_string(),
+                suggested_rating: 2,
+            }));
+        }
+        
+        // Sort results by original index to maintain order
+        results.sort_by_key(|(index, _)| *index);
+        let final_results: Vec<BatchGradingResult> = results.into_iter().map(|(_, result)| result).collect();
+        
+        let avg_duration = if !durations.is_empty() {
+            durations.iter().sum::<std::time::Duration>().as_millis() / durations.len() as u128
+        } else {
+            0
+        };
+        
+        info!(
+            card_id = %card.id,
+            results_count = final_results.len(),
+            avg_task_duration_ms = avg_duration,
+            concurrent_tasks_used = max_concurrent,
+            "Concurrent answer grading completed"
+        );
+
+        Ok(final_results)
+    }
+
+    /// Grade answers with automatic processing mode selection and fallback
+    pub async fn grade_answers_with_fallback(
+        &self,
+        card: &Card,
+        questions_and_answers: Vec<(QuizQuestion, String)>,
+        processing_mode: Option<&str>,
+        max_concurrent_tasks: Option<usize>,
+    ) -> Result<(Vec<BatchGradingResult>, String, Option<String>)> {
+        let start_time = std::time::Instant::now();
+        
+        let requested_mode = processing_mode.unwrap_or("parallel");
+        
+        // Try parallel processing first if requested
+        if requested_mode == "parallel" {
+            match self.grade_answers_concurrently(card, questions_and_answers.clone(), max_concurrent_tasks).await {
+                Ok(results) => {
+                    let duration = start_time.elapsed();
+                    info!(
+                        card_id = %card.id,
+                        duration_ms = duration.as_millis() as u64,
+                        processing_mode = "parallel",
+                        "Successfully completed parallel answer grading"
+                    );
+                    return Ok((results, "parallel".to_string(), None));
+                }
+                Err(e) => {
+                    warn!(
+                        card_id = %card.id,
+                        error = %e,
+                        "Parallel processing failed, falling back to batch processing"
+                    );
+                }
+            }
+        }
+        
+        // Try batch processing as fallback
+        if requested_mode == "parallel" || requested_mode == "batch" {
+            // Convert to batch grading requests
+            let batch_requests: Vec<BatchGradingRequest> = questions_and_answers.iter()
+                .map(|(question, answer)| BatchGradingRequest {
+                    card_content: card.content.clone(),
+                    question: question.clone(),
+                    user_answer: answer.clone(),
+                })
+                .collect();
+                
+            match self.grade_batch_answers(&batch_requests).await {
+                Ok(results) => {
+                    let duration = start_time.elapsed();
+                    let fallback_reason = if requested_mode == "parallel" {
+                        Some("Parallel processing unavailable, used batch processing".to_string())
+                    } else {
+                        None
+                    };
+                    
+                    info!(
+                        card_id = %card.id,
+                        duration_ms = duration.as_millis() as u64,
+                        processing_mode = "batch_fallback",
+                        "Successfully completed batch answer grading"
+                    );
+                    return Ok((results, "batch_fallback".to_string(), fallback_reason));
+                }
+                Err(e) => {
+                    warn!(
+                        card_id = %card.id,
+                        error = %e,
+                        "Batch processing failed, falling back to sequential processing"
+                    );
+                }
+            }
+        }
+        
+        // Final fallback: sequential individual grading
+        let mut results = Vec::new();
+        
+        for (index, (question, answer)) in questions_and_answers.into_iter().enumerate() {
+            match self.grade_answer(card, &question, &answer).await {
+                Ok(grading_result) => {
+                    results.push(BatchGradingResult {
+                        question_id: (index + 1).to_string(),
+                        is_correct: grading_result.is_correct,
+                        feedback: grading_result.feedback,
+                        suggested_rating: grading_result.suggested_rating,
+                    });
+                }
+                Err(e) => {
+                    warn!(
+                        card_id = %card.id,
+                        question_index = index,
+                        error = %e,
+                        "Sequential grading failed for individual question"
+                    );
+                    results.push(BatchGradingResult {
+                        question_id: (index + 1).to_string(),
+                        is_correct: false,
+                        feedback: "Unable to grade this answer due to technical issues.".to_string(),
+                        suggested_rating: 2,
+                    });
+                }
+            }
+        }
+        
+        let duration = start_time.elapsed();
+        let fallback_reason = Some("Both parallel and batch processing failed, used sequential processing".to_string());
+        
+        info!(
+            card_id = %card.id,
+            duration_ms = duration.as_millis() as u64,
+            processing_mode = "sequential_fallback",
+            "Completed sequential answer grading fallback"
+        );
+        
+        Ok((results, "sequential_fallback".to_string(), fallback_reason))
     }
 }

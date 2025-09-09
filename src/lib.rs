@@ -12,6 +12,11 @@ pub mod models;
 #[cfg(test)]
 mod tests {
     mod session_answer_test;
+    mod batch_grading_test;
+    mod batch_grading_service_test;
+    mod batch_grading_integration_test;
+    mod parallel_grading_phase2_test;
+    mod concurrent_processing_integration_test;
 }
 
 pub use card_service::CardService;

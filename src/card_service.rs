@@ -21,6 +21,15 @@ impl CardService {
         }
     }
 
+    #[cfg(test)]
+    pub async fn new_in_memory() -> Result<Self> {
+        let db = Database::new_in_memory().await?;
+        Ok(Self {
+            db,
+            scheduler: FSRSScheduler::new(),
+        })
+    }
+
     // Card CRUD operations
     pub async fn create_card(&self, request: CreateCardRequest) -> Result<Card> {
         let card = self.db.create_card(request).await?;

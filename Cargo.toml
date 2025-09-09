@@ -14,7 +14,7 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 thiserror = "1.0"
 axum = "0.7"
-tower = "0.4"
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors"] }
 reqwest = { version = "0.12", features = ["json"] }
 # fsrs = "0.4"  # Temporarily disabled due to dependency issues
@@ -24,6 +24,7 @@ tracing-appender = "0.2"
 dotenvy = "0.15"
 regex = "1.10"
 async-trait = "0.1"
+futures-util = "0.3"
 
 [[bin]]
 name = "migrate_titles"
@@ -31,3 +32,4 @@ path = "src/bin/migrate_titles.rs"
 
 [dev-dependencies]
 axum-test = "15.0"
+futures-util = "0.3"

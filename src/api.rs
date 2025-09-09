@@ -40,6 +40,24 @@ pub struct QuizAnswerRequest {
     pub answer: String,
 }
 
+#[derive(Deserialize)]
+pub struct BatchAnswerRequest {
+    pub answers: Vec<QuestionAnswer>,
+}
+
+#[derive(Deserialize)]
+pub struct ParallelAnswerRequest {
+    pub answers: Vec<QuestionAnswer>,
+    pub processing_mode: Option<String>, // "parallel", "batch", "sequential"
+    pub max_concurrent_tasks: Option<usize>, // Optional concurrency limit
+}
+
+#[derive(Deserialize)]
+pub struct QuestionAnswer {
+    pub question_index: usize,
+    pub answer: String,
+}
+
 
 #[derive(Deserialize)]
 pub struct SearchParams {
@@ -51,6 +69,24 @@ pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
     pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ParallelProcessingMetrics {
+    pub total_processing_time_ms: u64,
+    pub parallel_tasks_spawned: usize,
+    pub concurrent_execution_count: usize,
+    pub average_task_duration_ms: u64,
+    pub processing_mode_used: String, // "parallel", "batch_fallback", "sequential_fallback"
+    pub fallback_reason: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ParallelApiResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+    pub metrics: Option<ParallelProcessingMetrics>,
 }
 
 impl<T> ApiResponse<T> {
@@ -561,6 +597,254 @@ pub async fn submit_session_answer(
     }
 }
 
+pub async fn submit_batch_session_answers(
+    State(state): State<AppState>,
+    Path((session_id, card_id)): Path<(Uuid, Uuid)>,
+    Json(request): Json<BatchAnswerRequest>,
+) -> Result<Json<ApiResponse<Vec<BatchGradingResult>>>, StatusCode> {
+    info!(
+        session_id = %session_id,
+        card_id = %card_id,
+        answer_count = request.answers.len(),
+        "Submitting batch answers for session-based quiz"
+    );
+
+    // Validate empty request
+    if request.answers.is_empty() {
+        warn!(session_id = %session_id, card_id = %card_id, "Empty batch answer request");
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Get the session and validate it exists
+    let session = {
+        let sessions = state.review_sessions.lock().unwrap();
+        match sessions.get(&session_id) {
+            Some(session) => session.clone(),
+            None => {
+                warn!(session_id = %session_id, "Session not found for batch answer submission");
+                return Err(StatusCode::NOT_FOUND);
+            }
+        }
+    };
+
+    // Get the card
+    let card = match state.card_service.get_card(card_id).await {
+        Ok(Some(card)) => {
+            debug!(card_id = %card_id, zettel_id = %card.zettel_id, "Retrieved card for batch answer grading");
+            card
+        },
+        Ok(None) => {
+            warn!(card_id = %card_id, "Card not found for batch session quiz answers");
+            return Err(StatusCode::NOT_FOUND);
+        },
+        Err(e) => {
+            error!(card_id = %card_id, error = %e, "Error getting card for batch session quiz answers");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Get the questions for this card from the session
+    let questions = match session.questions.get(&card_id) {
+        Some(questions) => questions,
+        None => {
+            warn!(session_id = %session_id, card_id = %card_id, "No questions found for card in session");
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
+    // Validate question indices
+    for answer_request in &request.answers {
+        if answer_request.question_index >= questions.len() {
+            warn!(
+                session_id = %session_id,
+                card_id = %card_id,
+                question_index = answer_request.question_index,
+                questions_count = questions.len(),
+                "Invalid question index in batch request"
+            );
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    // Build batch grading requests
+    let batch_requests: Vec<BatchGradingRequest> = request.answers
+        .iter()
+        .map(|answer_request| {
+            let question = &questions[answer_request.question_index];
+            BatchGradingRequest {
+                card_content: card.content.clone(),
+                question: question.clone(),
+                user_answer: answer_request.answer.clone(),
+            }
+        })
+        .collect();
+
+    // Grade all answers in batch
+    match state.llm_service.grade_batch_answers(&batch_requests).await {
+        Ok(grading_results) => {
+            info!(
+                session_id = %session_id,
+                card_id = %card_id,
+                result_count = grading_results.len(),
+                "Batch answers graded successfully (FSRS updates deferred until card completion)"
+            );
+            
+            Ok(Json(ApiResponse::success(grading_results)))
+        },
+        Err(e) => {
+            error!(
+                session_id = %session_id,
+                card_id = %card_id,
+                error = %e,
+                "Error grading batch session quiz answers"
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Submit answers for parallel processing with concurrent individual grading
+pub async fn submit_parallel_session_answers(
+    State(state): State<AppState>,
+    Path((session_id, card_id)): Path<(Uuid, Uuid)>,
+    Json(request): Json<ParallelAnswerRequest>,
+) -> Result<Json<ParallelApiResponse<Vec<BatchGradingResult>>>, StatusCode> {
+    let start_time = std::time::Instant::now();
+    
+    info!(
+        session_id = %session_id,
+        card_id = %card_id,
+        answer_count = request.answers.len(),
+        processing_mode = ?request.processing_mode,
+        max_concurrent = ?request.max_concurrent_tasks,
+        "Submitting answers for parallel processing"
+    );
+    
+    // Validate empty request
+    if request.answers.is_empty() {
+        warn!(session_id = %session_id, card_id = %card_id, "Empty parallel answer request");
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    
+    // Get the session and validate it exists
+    let session = {
+        let sessions = state.review_sessions.lock().unwrap();
+        match sessions.get(&session_id) {
+            Some(session) => session.clone(),
+            None => {
+                warn!(session_id = %session_id, "Session not found for parallel answer submission");
+                return Err(StatusCode::NOT_FOUND);
+            }
+        }
+    };
+    
+    // Get the card
+    let card = match state.card_service.get_card(card_id).await {
+        Ok(Some(card)) => {
+            debug!(card_id = %card_id, zettel_id = %card.zettel_id, "Retrieved card for parallel answer grading");
+            card
+        },
+        Ok(None) => {
+            warn!(card_id = %card_id, "Card not found for parallel session quiz answers");
+            return Err(StatusCode::NOT_FOUND);
+        },
+        Err(e) => {
+            error!(card_id = %card_id, error = %e, "Error getting card for parallel session quiz answers");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+    
+    // Get the questions for this card from the session
+    let questions = match session.questions.get(&card_id) {
+        Some(questions) => questions,
+        None => {
+            warn!(session_id = %session_id, card_id = %card_id, "No questions found for card in session");
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+    
+    // Validate question indices
+    for answer_request in &request.answers {
+        if answer_request.question_index >= questions.len() {
+            warn!(
+                session_id = %session_id,
+                card_id = %card_id,
+                question_index = answer_request.question_index,
+                questions_count = questions.len(),
+                "Invalid question index in parallel request"
+            );
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+    
+    // Build questions and answers for parallel processing
+    let questions_and_answers: Vec<(QuizQuestion, String)> = request.answers
+        .iter()
+        .map(|answer_request| {
+            let question = &questions[answer_request.question_index];
+            (question.clone(), answer_request.answer.clone())
+        })
+        .collect();
+    
+    // Process with fallback chain
+    let processing_mode = request.processing_mode.as_deref();
+    match state.llm_service.grade_answers_with_fallback(
+        &card, 
+        questions_and_answers, 
+        processing_mode,
+        request.max_concurrent_tasks
+    ).await {
+        Ok((grading_results, mode_used, fallback_reason)) => {
+            let total_duration = start_time.elapsed();
+            
+            // Calculate metrics
+            let metrics = ParallelProcessingMetrics {
+                total_processing_time_ms: total_duration.as_millis() as u64,
+                parallel_tasks_spawned: if mode_used == "parallel" { 
+                    grading_results.len() 
+                } else { 
+                    0 
+                },
+                concurrent_execution_count: request.max_concurrent_tasks.unwrap_or(5).min(grading_results.len()),
+                average_task_duration_ms: total_duration.as_millis() as u64 / grading_results.len().max(1) as u64,
+                processing_mode_used: mode_used,
+                fallback_reason,
+            };
+            
+            info!(
+                session_id = %session_id,
+                card_id = %card_id,
+                result_count = grading_results.len(),
+                processing_mode = %metrics.processing_mode_used,
+                total_duration_ms = metrics.total_processing_time_ms,
+                "Parallel answers processed successfully (FSRS updates deferred until card completion)"
+            );
+            
+            Ok(Json(ParallelApiResponse {
+                success: true,
+                data: Some(grading_results),
+                error: None,
+                metrics: Some(metrics),
+            }))
+        },
+        Err(e) => {
+            error!(
+                session_id = %session_id,
+                card_id = %card_id,
+                error = %e,
+                "Error processing parallel session quiz answers"
+            );
+            
+            Ok(Json(ParallelApiResponse {
+                success: false,
+                data: None,
+                error: Some("Failed to process answers".to_string()),
+                metrics: None,
+            }))
+        }
+    }
+}
+
 // Quiz endpoints (legacy)
 
 
@@ -715,9 +999,16 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/review/session/start", post(start_review_session))
         .route("/api/review/session/:id", get(get_review_session))
         .route("/api/review/session/:session_id/answer/:card_id", post(submit_session_answer))
+        .route("/api/review/session/:session_id/answers/:card_id/batch", post(submit_batch_session_answers))
+        .route("/api/review/session/:session_id/answers/:card_id/parallel", post(submit_parallel_session_answers))
         
         // Review routes
         .route("/api/cards/:id/review", post(review_card))
         
         .with_state(state)
+}
+
+#[cfg(test)]
+pub fn create_app(state: AppState) -> Router {
+    create_router(state)
 }

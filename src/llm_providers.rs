@@ -15,6 +15,8 @@ pub struct LLMMessage {
 pub enum LLMProvider {
     OpenAI(OpenAIProvider),
     Gemini(GeminiProvider),
+    #[cfg(test)]
+    Mock(MockProvider),
 }
 
 impl LLMProvider {
@@ -23,6 +25,8 @@ impl LLMProvider {
         match self {
             LLMProvider::OpenAI(provider) => provider.make_request(system_message, prompt).await,
             LLMProvider::Gemini(provider) => provider.make_request(system_message, prompt).await,
+            #[cfg(test)]
+            LLMProvider::Mock(provider) => provider.make_request(system_message, prompt).await,
         }
     }
     
@@ -31,6 +35,8 @@ impl LLMProvider {
         match self {
             LLMProvider::OpenAI(provider) => provider.provider_name(),
             LLMProvider::Gemini(provider) => provider.provider_name(),
+            #[cfg(test)]
+            LLMProvider::Mock(provider) => provider.provider_name(),
         }
     }
     
@@ -39,6 +45,8 @@ impl LLMProvider {
         match self {
             LLMProvider::OpenAI(provider) => provider.model_name(),
             LLMProvider::Gemini(provider) => provider.model_name(),
+            #[cfg(test)]
+            LLMProvider::Mock(provider) => provider.model_name(),
         }
     }
 }
@@ -333,6 +341,9 @@ impl GeminiProvider {
 pub struct JsonResponseParser;
 
 impl JsonResponseParser {
+    pub fn new() -> Self {
+        Self
+    }
     /// Extract JSON from LLM responses that might be wrapped in markdown or other formatting
     pub fn extract_json_from_response(content: &str) -> String {
         // Try to find JSON within markdown code blocks
@@ -411,5 +422,131 @@ impl LLMProviderFactory {
             LLMProviderType::OpenAI => LLMProvider::OpenAI(OpenAIProvider::new(api_key, base_url, model)),
             LLMProviderType::Gemini => LLMProvider::Gemini(GeminiProvider::new(api_key, base_url, model)),
         }
+    }
+}
+
+#[cfg(test)]
+/// Mock provider for testing
+#[derive(Debug, Clone)]
+pub struct MockProvider {
+    correct_answers: bool,
+    batch_fails: bool,
+    mixed_mode: bool,
+}
+
+#[cfg(test)]
+impl MockProvider {
+    pub fn new(correct_answers: bool, batch_fails: bool) -> Self {
+        Self {
+            correct_answers,
+            batch_fails,
+            mixed_mode: false,
+        }
+    }
+
+    /// Create a mock provider that returns mixed results (alternating correct/incorrect)
+    pub fn new_mixed() -> Self {
+        Self {
+            correct_answers: false, // Will be ignored in mixed mode
+            batch_fails: false,
+            mixed_mode: true,
+        }
+    }
+
+    /// Create a mock provider configured to be in mixed mode
+    fn is_mixed_mode(&self) -> bool {
+        self.mixed_mode
+    }
+
+    pub async fn make_request(&self, _system_message: Option<&str>, prompt: &str) -> Result<String> {
+        // Simulate network delay
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Check if this is a batch grading request
+        if prompt.contains("Grade the following quiz answers") {
+            if self.batch_fails {
+                // Return an error to trigger fallback to individual grading
+                return Err(anyhow::anyhow!("Mock batch failure for testing fallback"));
+            }
+            
+            // Count questions in the prompt - look for the actual format used
+            let question_count = prompt.lines()
+                .filter(|line| line.contains(". Card Content:"))
+                .count();
+            
+            let mut results = Vec::new();
+            for i in 1..=question_count {
+                // Handle mixed results: detect by checking if we're in mixed mode
+                let is_correct = if self.is_mixed_mode() {
+                    // Mixed mode: alternate results (first correct, second incorrect, etc.)
+                    i % 2 == 1 // Odd questions correct, even questions incorrect
+                } else {
+                    self.correct_answers
+                };
+
+
+                let result = serde_json::json!({
+                    "question_id": i.to_string(),
+                    "is_correct": is_correct,
+                    "feedback": if is_correct {
+                        "Excellent understanding demonstrated."
+                    } else {
+                        "This answer needs improvement."
+                    },
+                    "suggested_rating": if is_correct { 4 } else { 2 }
+                });
+                results.push(result);
+            }
+            
+            Ok(serde_json::to_string(&results)?)
+        } else {
+            // Individual grading or quiz generation
+            if prompt.contains("Grade the following quiz answer") {
+                // For individual grading, use consistent behavior
+                let is_correct = if self.is_mixed_mode() {
+                    // In mixed mode, make individual grading succeed (for fallback testing)
+                    true
+                } else {
+                    self.correct_answers
+                };
+
+                let result = serde_json::json!({
+                    "is_correct": is_correct,
+                    "feedback": if is_correct {
+                        "Correct answer!"
+                    } else {
+                        "Incorrect answer."
+                    },
+                    "suggested_rating": if is_correct { 4 } else { 2 }
+                });
+                Ok(serde_json::to_string(&result)?)
+            } else {
+                // Quiz generation
+                let questions = serde_json::json!({
+                    "questions": [
+                        {
+                            "question": "What is the main concept?",
+                            "question_type": "short_answer",
+                            "correct_answer": "Main concept"
+                        },
+                        {
+                            "question": "Choose the correct option",
+                            "question_type": "multiple_choice",
+                            "options": ["A) Option 1", "B) Option 2"],
+                            "correct_answer": "A) Option 1"
+                        }
+                    ]
+                });
+                Ok(serde_json::to_string(&questions)?)
+            }
+        }
+    }
+
+    pub fn provider_name(&self) -> &'static str {
+        "Mock"
+    }
+
+    pub fn model_name(&self) -> &str {
+        "mock-model"
     }
 }
