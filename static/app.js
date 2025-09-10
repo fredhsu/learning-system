@@ -49,7 +49,53 @@ class LearningSystem {
         // First process wiki links, then markdown
         const processedContent = this.processWikiLinks(content);
         if (typeof marked !== 'undefined') {
-            return marked.parse(processedContent);
+            // Configure marked to be LaTeX-friendly
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                sanitize: false,
+                smartypants: false, // Disable smart quotes that interfere with LaTeX
+                headerIds: false,
+                mangle: false
+            });
+            
+            // Protect LaTeX math expressions from markdown processing
+            const mathPlaceholders = [];
+            let protectedContent = processedContent;
+            
+            // Protect display math ($$...$$)
+            protectedContent = protectedContent.replace(/\$\$([\s\S]*?)\$\$/g, (match) => {
+                const index = mathPlaceholders.length;
+                mathPlaceholders.push({ type: 'DISPLAYMATH', content: match });
+                return `LATEXMATH${index}PLACEHOLDER`;
+            });
+            
+            // Protect inline math ($...$)
+            protectedContent = protectedContent.replace(/\$([^$\n]+?)\$/g, (match) => {
+                const index = mathPlaceholders.length;
+                mathPlaceholders.push({ type: 'INLINEMATH', content: match });
+                return `LATEXMATH${index}PLACEHOLDER`;
+            });
+            
+            // Protect LaTeX environments (\begin{...}...\end{...})
+            protectedContent = protectedContent.replace(/\\begin\{([^}]+)\}([\s\S]*?)\\end\{\1\}/g, (match) => {
+                const index = mathPlaceholders.length;
+                mathPlaceholders.push({ type: 'LATEXENV', content: match });
+                return `LATEXMATH${index}PLACEHOLDER`;
+            });
+            
+            // Process markdown on protected content
+            const renderedContent = marked.parse(protectedContent);
+            
+            // Restore LaTeX math expressions using simple string replacement
+            let restoredContent = renderedContent;
+            mathPlaceholders.forEach((placeholder, index) => {
+                const placeholderText = `LATEXMATH${index}PLACEHOLDER`;
+                // Use global replacement to handle all occurrences
+                restoredContent = restoredContent.split(placeholderText).join(placeholder.content);
+            });
+            
+            return restoredContent;
         }
         return processedContent.replace(/\n/g, '<br>');
     }

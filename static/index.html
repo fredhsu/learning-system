@@ -13,7 +13,9 @@
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
                 displayMath: [['$$', '$$'], ['\\[', '\\]']],
                 processEscapes: true,
-                processEnvironments: true
+                processEnvironments: true,
+                // Enable proper handling of line breaks in matrices and aligned environments
+                packages: {'[+]': ['ams', 'newcommand', 'configMacros']}
             },
             options: {
                 ignoreHtmlClass: 'tex2jax_ignore',
