@@ -2,4 +2,5 @@
 .env
 /logs
 *.log
+.playwright-mcp/
 
