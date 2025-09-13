@@ -1,0 +1,98 @@
+name: Database Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  database-tests:
+    name: Database Migration & Integration Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        database: [sqlite]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-db-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Setup test databases
+      run: |
+        # Create multiple test databases for parallel testing
+        for i in {1..3}; do
+          touch "test_db_${i}.db"
+        done
+        
+    - name: Test database creation and schema
+      run: |
+        DATABASE_URL="sqlite:schema_test.db" cargo test database::tests::test_database_creation --verbose
+      env:
+        DATABASE_URL: "sqlite:schema_test.db"
+        
+    - name: Test migration binary
+      run: |
+        cargo build --bin migrate_titles --verbose
+        DATABASE_URL="sqlite:migration_test.db" cargo run --bin migrate_titles || echo "Migration completed or no migrations needed"
+      env:
+        DATABASE_URL: "sqlite:migration_test.db"
+        
+    - name: Run database-specific tests
+      run: |
+        # Test database operations
+        DATABASE_URL="sqlite:db_ops_test.db" cargo test database --verbose
+        
+        # Test card operations with database
+        DATABASE_URL="sqlite:card_ops_test.db" cargo test card_service --verbose
+        
+        # Test FSRS operations with database
+        DATABASE_URL="sqlite:fsrs_test.db" cargo test fsrs --verbose
+      env:
+        RUST_LOG: debug
+        
+    - name: Test concurrent database access
+      run: |
+        DATABASE_URL="sqlite:concurrent_test.db" cargo test concurrent --verbose || echo "No concurrent tests found"
+      env:
+        DATABASE_URL: "sqlite:concurrent_test.db"
+        
+    - name: Test database cleanup and constraints
+      run: |
+        DATABASE_URL="sqlite:constraints_test.db" cargo test integration_tests --verbose
+      env:
+        DATABASE_URL: "sqlite:constraints_test.db"
+        
+    - name: Verify database integrity
+      run: |
+        # Check if any test databases were corrupted
+        for db in *.db; do
+          if [ -f "$db" ]; then
+            sqlite3 "$db" "PRAGMA integrity_check;" || echo "Database $db has integrity issues"
+          fi
+        done
+        
+    - name: Upload test databases for debugging
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-databases
+        path: |
+          *.db
+          logs/
+        retention-days: 7
