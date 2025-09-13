@@ -18,7 +18,7 @@ pub struct Card {
     pub retrievability: f64,
     pub reps: i32,
     pub lapses: i32,
-    pub state: String, // New, Learning, Review, Relearning
+    pub state: String,         // New, Learning, Review, Relearning
     pub links: Option<String>, // JSON array of linked card IDs
 }
 

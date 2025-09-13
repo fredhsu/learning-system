@@ -29,7 +29,7 @@ impl LLMProvider {
             LLMProvider::Mock(provider) => provider.make_request(system_message, prompt).await,
         }
     }
-    
+
     /// Get the provider name for logging
     pub fn provider_name(&self) -> &'static str {
         match self {
@@ -39,7 +39,7 @@ impl LLMProvider {
             LLMProvider::Mock(provider) => provider.provider_name(),
         }
     }
-    
+
     /// Get the model name being used
     pub fn model_name(&self) -> &str {
         match self {
@@ -119,14 +119,14 @@ impl OpenAIProvider {
     pub async fn make_request(&self, system_message: Option<&str>, prompt: &str) -> Result<String> {
         // Build messages array for Chat Completions API
         let mut messages = Vec::new();
-        
+
         if let Some(sys_msg) = system_message {
             messages.push(OpenAIMessage {
                 role: "system".to_string(),
                 content: sys_msg.to_string(),
             });
         }
-        
+
         messages.push(OpenAIMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
@@ -156,7 +156,10 @@ impl OpenAIProvider {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             error!(
                 provider = self.provider_name(),
                 status = %status,
@@ -167,7 +170,7 @@ impl OpenAIProvider {
         }
 
         let openai_response: OpenAIResponse = response.json().await?;
-        
+
         if openai_response.choices.is_empty() {
             return Err(anyhow::anyhow!("No choices in OpenAI response"));
         }
@@ -245,7 +248,8 @@ impl GeminiProvider {
         Self {
             client: Client::new(),
             api_key,
-            base_url: base_url.unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string()),
+            base_url: base_url
+                .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string()),
             model: model.unwrap_or_else(|| "gemini-2.0-flash-exp".to_string()),
         }
     }
@@ -260,9 +264,7 @@ impl GeminiProvider {
 
         let request_body = GeminiRequest {
             contents: vec![GeminiContent {
-                parts: vec![GeminiPart {
-                    text: full_prompt,
-                }],
+                parts: vec![GeminiPart { text: full_prompt }],
             }],
             generation_config: GeminiGenerationConfig {
                 temperature: 0.7,
@@ -273,10 +275,8 @@ impl GeminiProvider {
         };
 
         let url = format!(
-            "{}/models/{}:generateContent?key={}", 
-            self.base_url, 
-            self.model, 
-            self.api_key
+            "{}/models/{}:generateContent?key={}",
+            self.base_url, self.model, self.api_key
         );
 
         info!(
@@ -297,7 +297,10 @@ impl GeminiProvider {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             error!(
                 provider = self.provider_name(),
                 status = %status,
@@ -308,7 +311,7 @@ impl GeminiProvider {
         }
 
         let gemini_response: GeminiResponse = response.json().await?;
-        
+
         if gemini_response.candidates.is_empty() {
             return Err(anyhow::anyhow!("No candidates in Gemini response"));
         }
@@ -391,9 +394,9 @@ impl JsonResponseParser {
     }
 
     /// Parse JSON response into a specific type with error handling
-    pub fn parse_json_response<T>(&self, content: &str) -> Result<T> 
-    where 
-        T: serde::de::DeserializeOwned 
+    pub fn parse_json_response<T>(&self, content: &str) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
     {
         let json_content = Self::extract_json_from_response(content);
         serde_json::from_str::<T>(&json_content)
@@ -419,8 +422,12 @@ impl LLMProviderFactory {
         model: Option<String>,
     ) -> LLMProvider {
         match provider_type {
-            LLMProviderType::OpenAI => LLMProvider::OpenAI(OpenAIProvider::new(api_key, base_url, model)),
-            LLMProviderType::Gemini => LLMProvider::Gemini(GeminiProvider::new(api_key, base_url, model)),
+            LLMProviderType::OpenAI => {
+                LLMProvider::OpenAI(OpenAIProvider::new(api_key, base_url, model))
+            }
+            LLMProviderType::Gemini => {
+                LLMProvider::Gemini(GeminiProvider::new(api_key, base_url, model))
+            }
         }
     }
 }
@@ -458,7 +465,11 @@ impl MockProvider {
         self.mixed_mode
     }
 
-    pub async fn make_request(&self, _system_message: Option<&str>, prompt: &str) -> Result<String> {
+    pub async fn make_request(
+        &self,
+        _system_message: Option<&str>,
+        prompt: &str,
+    ) -> Result<String> {
         // Simulate network delay
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
@@ -468,12 +479,13 @@ impl MockProvider {
                 // Return an error to trigger fallback to individual grading
                 return Err(anyhow::anyhow!("Mock batch failure for testing fallback"));
             }
-            
+
             // Count questions in the prompt - look for the actual format used
-            let question_count = prompt.lines()
+            let question_count = prompt
+                .lines()
                 .filter(|line| line.contains(". Card Content:"))
                 .count();
-            
+
             let mut results = Vec::new();
             for i in 1..=question_count {
                 // Handle mixed results: detect by checking if we're in mixed mode
@@ -483,7 +495,6 @@ impl MockProvider {
                 } else {
                     self.correct_answers
                 };
-
 
                 let result = serde_json::json!({
                     "question_id": i.to_string(),
@@ -497,7 +508,7 @@ impl MockProvider {
                 });
                 results.push(result);
             }
-            
+
             Ok(serde_json::to_string(&results)?)
         } else {
             // Individual grading or quiz generation

@@ -1,4 +1,7 @@
-use learning_system::{Database, CardService, CreateCardRequest, UpdateCardRequest, CreateCardWithZettelLinksRequest, UpdateCardWithZettelLinksRequest};
+use learning_system::{
+    CardService, CreateCardRequest, CreateCardWithZettelLinksRequest, Database, UpdateCardRequest,
+    UpdateCardWithZettelLinksRequest,
+};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -15,7 +18,10 @@ async fn test_card_creation_and_retrieval() {
     };
 
     let created_card = card_service.create_card(create_request).await.unwrap();
-    assert_eq!(created_card.content, "Test card content with LaTeX: $x^2 + y^2 = z^2$");
+    assert_eq!(
+        created_card.content,
+        "Test card content with LaTeX: $x^2 + y^2 = z^2$"
+    );
     assert_eq!(created_card.reps, 0);
     assert_eq!(created_card.state, "New");
 
@@ -26,8 +32,8 @@ async fn test_card_creation_and_retrieval() {
 
 #[tokio::test]
 async fn test_fsrs_scheduling() {
-    use learning_system::FSRSScheduler;
     use chrono::Utc;
+    use learning_system::FSRSScheduler;
 
     let scheduler = FSRSScheduler::new();
     let now = Utc::now();
@@ -64,13 +70,19 @@ async fn test_topic_creation() {
     let db = Database::new("sqlite::memory:").await.unwrap();
     let card_service = CardService::new(db);
 
-    let topic = card_service.create_topic(
-        "Mathematics".to_string(),
-        Some("Mathematical concepts and formulas".to_string())
-    ).await.unwrap();
+    let topic = card_service
+        .create_topic(
+            "Mathematics".to_string(),
+            Some("Mathematical concepts and formulas".to_string()),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(topic.name, "Mathematics");
-    assert_eq!(topic.description, Some("Mathematical concepts and formulas".to_string()));
+    assert_eq!(
+        topic.description,
+        Some("Mathematical concepts and formulas".to_string())
+    );
 
     let topics = card_service.get_all_topics().await.unwrap();
     assert_eq!(topics.len(), 1);
@@ -100,7 +112,7 @@ async fn test_review_workflow() {
     // Review the card with a "Good" rating
     let reviewed_card = card_service.review_card(card.id, 3).await.unwrap();
     assert!(reviewed_card.is_some());
-    
+
     let reviewed_card = reviewed_card.unwrap();
     assert!(reviewed_card.next_review > card.next_review);
     assert_eq!(reviewed_card.reps, 1);
@@ -134,13 +146,16 @@ async fn test_card_update() {
         links: Some(vec![Uuid::new_v4()]),
     };
 
-    let updated_card = card_service.update_card(card.id, update_request).await.unwrap();
+    let updated_card = card_service
+        .update_card(card.id, update_request)
+        .await
+        .unwrap();
     assert!(updated_card.is_some());
-    
+
     let updated_card = updated_card.unwrap();
     assert_eq!(updated_card.content, "Updated content");
     assert!(updated_card.links.is_some());
-    
+
     // Verify the card was actually updated in the database
     let retrieved_card = card_service.get_card(card.id).await.unwrap();
     assert!(retrieved_card.is_some());
@@ -163,7 +178,10 @@ async fn test_card_update_nonexistent() {
         links: None,
     };
 
-    let result = card_service.update_card(fake_id, update_request).await.unwrap();
+    let result = card_service
+        .update_card(fake_id, update_request)
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -181,7 +199,7 @@ async fn test_card_deletion() {
     };
 
     let card = card_service.create_card(create_request).await.unwrap();
-    
+
     // Verify card exists
     let retrieved_card = card_service.get_card(card.id).await.unwrap();
     assert!(retrieved_card.is_some());
@@ -240,7 +258,10 @@ async fn test_database_card_operations() {
 
     let retrieved_after_update = db.get_card(card.id).await.unwrap();
     assert!(retrieved_after_update.is_some());
-    assert_eq!(retrieved_after_update.as_ref().unwrap().content, "Updated direct database test");
+    assert_eq!(
+        retrieved_after_update.as_ref().unwrap().content,
+        "Updated direct database test"
+    );
     assert!(retrieved_after_update.as_ref().unwrap().links.is_none());
 
     // Test direct database deletion
@@ -257,22 +278,28 @@ async fn test_card_links_functionality() {
     let card_service = CardService::new(db);
 
     // Create first card
-    let card1 = card_service.create_card(CreateCardRequest {
-        zettel_id: "LINK-001".to_string(),
-        title: None,
-        content: "Card 1".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card1 = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "LINK-001".to_string(),
+            title: None,
+            content: "Card 1".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Create second card
-    let card2 = card_service.create_card(CreateCardRequest {
-        zettel_id: "LINK-002".to_string(),
-        title: None,
-        content: "Card 2".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card2 = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "LINK-002".to_string(),
+            title: None,
+            content: "Card 2".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Update first card to link to second card
     let update_request = UpdateCardRequest {
@@ -283,7 +310,10 @@ async fn test_card_links_functionality() {
         links: Some(vec![card2.id]),
     };
 
-    let updated_card1 = card_service.update_card(card1.id, update_request).await.unwrap();
+    let updated_card1 = card_service
+        .update_card(card1.id, update_request)
+        .await
+        .unwrap();
     assert!(updated_card1.is_some());
 
     // Test getting linked cards
@@ -326,7 +356,10 @@ async fn test_multiple_card_operations() {
                 topic_ids: None,
                 links: None,
             };
-            let updated = card_service.update_card(card_id, update_request).await.unwrap();
+            let updated = card_service
+                .update_card(card_id, update_request)
+                .await
+                .unwrap();
             assert!(updated.is_some());
         }
     }
@@ -359,10 +392,16 @@ async fn test_search_functionality() {
 
     // Create multiple cards with different content
     let cards_data = vec![
-        ("Mathematics formulas and physics: $E = mc^2$", "math, physics"),
+        (
+            "Mathematics formulas and physics: $E = mc^2$",
+            "math, physics",
+        ),
         ("Programming concepts in Rust", "programming, rust"),
         ("History of ancient civilizations", "history"),
-        ("Mathematics and programming intersection", "math, programming"),
+        (
+            "Mathematics and programming intersection",
+            "math, programming",
+        ),
         ("Physics concepts and formulas", "physics"),
     ];
 
@@ -407,13 +446,16 @@ async fn test_error_handling_edge_cases() {
     let card_service = CardService::new(db);
 
     // Test updating with empty content
-    let card = card_service.create_card(CreateCardRequest {
-        zettel_id: "EDGE-001".to_string(),
-        title: None,
-        content: "Original".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "EDGE-001".to_string(),
+            title: None,
+            content: "Original".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     let update_request = UpdateCardRequest {
         zettel_id: Some("EDGE-002".to_string()),
@@ -423,7 +465,10 @@ async fn test_error_handling_edge_cases() {
         links: None,
     };
 
-    let updated = card_service.update_card(card.id, update_request).await.unwrap();
+    let updated = card_service
+        .update_card(card.id, update_request)
+        .await
+        .unwrap();
     assert!(updated.is_some());
     assert_eq!(updated.unwrap().content, "");
 
@@ -437,7 +482,10 @@ async fn test_error_handling_edge_cases() {
         links: None,
     };
 
-    let updated = card_service.update_card(card.id, update_request).await.unwrap();
+    let updated = card_service
+        .update_card(card.id, update_request)
+        .await
+        .unwrap();
     assert!(updated.is_some());
     assert_eq!(updated.unwrap().content, long_content);
 }
@@ -449,7 +497,7 @@ async fn test_ui_preview_functionality() {
 
     // Test cards with content that would trigger preview mode (>100 characters)
     let long_content = "This is a very long card content that exceeds 100 characters and should trigger the preview functionality in the UI. ".repeat(2);
-    
+
     let create_request = CreateCardRequest {
         zettel_id: "UI-PREVIEW-001".to_string(),
         title: None,
@@ -471,27 +519,26 @@ async fn test_ui_preview_functionality() {
 #[tokio::test]
 async fn test_keyboard_shortcut_ratings() {
     use learning_system::FSRSScheduler;
-    
+
     let _scheduler = FSRSScheduler::new();
-    
+
     // Test that all keyboard shortcut ratings (1-4) work correctly
-    let rating_mappings = vec![
-        (1, "Again"),
-        (2, "Hard"), 
-        (3, "Good"),
-        (4, "Easy"),
-    ];
-    
+    let rating_mappings = vec![(1, "Again"), (2, "Hard"), (3, "Good"), (4, "Easy")];
+
     for (rating_int, _rating_name) in rating_mappings {
         let rating = FSRSScheduler::get_rating_from_int(rating_int);
         assert!(rating.is_some(), "Rating {} should be valid", rating_int);
     }
-    
+
     // Test invalid ratings
     let invalid_ratings = vec![0, 5, -1, 10];
     for invalid_rating in invalid_ratings {
         let rating = FSRSScheduler::get_rating_from_int(invalid_rating);
-        assert!(rating.is_none(), "Rating {} should be invalid", invalid_rating);
+        assert!(
+            rating.is_none(),
+            "Rating {} should be invalid",
+            invalid_rating
+        );
     }
 }
 
@@ -502,29 +549,38 @@ async fn test_backlinks_creation() {
     let card_service = CardService::new(db);
 
     // Create three cards
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "BACKLINK-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "BACKLINK-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_c = card_service.create_card(CreateCardRequest {
-        zettel_id: "BACKLINK-C".to_string(),
-        title: None,
-        content: "Card C".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_c = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-C".to_string(),
+            title: None,
+            content: "Card C".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Link card A to cards B and C
     let update_request = UpdateCardRequest {
@@ -535,7 +591,10 @@ async fn test_backlinks_creation() {
         links: Some(vec![card_b.id, card_c.id]),
     };
 
-    let updated_card_a = card_service.update_card(card_a.id, update_request).await.unwrap();
+    let updated_card_a = card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
     assert!(updated_card_a.is_some());
 
     // Test that forward links work
@@ -565,29 +624,38 @@ async fn test_backlinks_update_and_removal() {
     let card_service = CardService::new(db);
 
     // Create three cards
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "BACKLINK-UPDATE-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-UPDATE-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "BACKLINK-UPDATE-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-UPDATE-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_c = card_service.create_card(CreateCardRequest {
-        zettel_id: "BACKLINK-UPDATE-C".to_string(),
-        title: None,
-        content: "Card C".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_c = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BACKLINK-UPDATE-C".to_string(),
+            title: None,
+            content: "Card C".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Initially link A to B
     let update_request = UpdateCardRequest {
@@ -597,7 +665,10 @@ async fn test_backlinks_update_and_removal() {
         topic_ids: None,
         links: Some(vec![card_b.id]),
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Verify initial backlink
     let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
@@ -612,7 +683,10 @@ async fn test_backlinks_update_and_removal() {
         topic_ids: None,
         links: Some(vec![card_c.id]),
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Verify backlinks are updated
     let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
@@ -630,7 +704,10 @@ async fn test_backlinks_update_and_removal() {
         topic_ids: None,
         links: Some(vec![]),
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Verify all backlinks are removed
     let backlinks_c = card_service.get_backlinks(card_c.id).await.unwrap();
@@ -643,21 +720,27 @@ async fn test_backlinks_bidirectional_linking() {
     let card_service = CardService::new(db);
 
     // Create two cards
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "BIDIR-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BIDIR-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "BIDIR-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "BIDIR-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Link A to B
     let update_request = UpdateCardRequest {
@@ -667,7 +750,10 @@ async fn test_backlinks_bidirectional_linking() {
         topic_ids: None,
         links: Some(vec![card_b.id]),
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Link B to A
     let update_request = UpdateCardRequest {
@@ -677,7 +763,10 @@ async fn test_backlinks_bidirectional_linking() {
         topic_ids: None,
         links: Some(vec![card_a.id]),
     };
-    card_service.update_card(card_b.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_b.id, update_request)
+        .await
+        .unwrap();
 
     // Both cards should have forward links and backlinks
     let forward_links_a = card_service.get_linked_cards(card_a.id).await.unwrap();
@@ -703,21 +792,27 @@ async fn test_backlinks_card_deletion() {
     let card_service = CardService::new(db);
 
     // Create two cards
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "DELETE-BACKLINK-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "DELETE-BACKLINK-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "DELETE-BACKLINK-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "DELETE-BACKLINK-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Link A to B
     let update_request = UpdateCardRequest {
@@ -727,7 +822,10 @@ async fn test_backlinks_card_deletion() {
         topic_ids: None,
         links: Some(vec![card_b.id]),
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Verify backlink exists
     let backlinks_b = card_service.get_backlinks(card_b.id).await.unwrap();
@@ -753,37 +851,49 @@ async fn test_backlinks_multiple_sources() {
     let card_service = CardService::new(db);
 
     // Create four cards
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "MULTI-SOURCE-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "MULTI-SOURCE-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "MULTI-SOURCE-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "MULTI-SOURCE-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_c = card_service.create_card(CreateCardRequest {
-        zettel_id: "MULTI-SOURCE-C".to_string(),
-        title: None,
-        content: "Card C".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_c = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "MULTI-SOURCE-C".to_string(),
+            title: None,
+            content: "Card C".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_d = card_service.create_card(CreateCardRequest {
-        zettel_id: "MULTI-SOURCE-D".to_string(),
-        title: None,
-        content: "Card D".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_d = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "MULTI-SOURCE-D".to_string(),
+            title: None,
+            content: "Card D".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Link A to D, B to D, and C to D
     for (source_card, source_name) in [(card_a.id, "A"), (card_b.id, "B"), (card_c.id, "C")] {
@@ -794,18 +904,26 @@ async fn test_backlinks_multiple_sources() {
             topic_ids: None,
             links: Some(vec![card_d.id]),
         };
-        card_service.update_card(source_card, update_request).await.unwrap();
-        
+        card_service
+            .update_card(source_card, update_request)
+            .await
+            .unwrap();
+
         // Verify link was created
         let linked_cards = card_service.get_linked_cards(source_card).await.unwrap();
-        assert_eq!(linked_cards.len(), 1, "Card {} should link to D", source_name);
+        assert_eq!(
+            linked_cards.len(),
+            1,
+            "Card {} should link to D",
+            source_name
+        );
         assert_eq!(linked_cards[0].id, card_d.id);
     }
 
     // Card D should have backlinks from A, B, and C
     let backlinks_d = card_service.get_backlinks(card_d.id).await.unwrap();
     assert_eq!(backlinks_d.len(), 3);
-    
+
     let backlink_ids: Vec<Uuid> = backlinks_d.iter().map(|c| c.id).collect();
     assert!(backlink_ids.contains(&card_a.id));
     assert!(backlink_ids.contains(&card_b.id));
@@ -819,12 +937,15 @@ async fn test_backlinks_multiple_sources() {
         topic_ids: None,
         links: Some(vec![]),
     };
-    card_service.update_card(card_b.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_b.id, update_request)
+        .await
+        .unwrap();
 
     // Card D should now have backlinks from only A and C
     let backlinks_d = card_service.get_backlinks(card_d.id).await.unwrap();
     assert_eq!(backlinks_d.len(), 2);
-    
+
     let backlink_ids: Vec<Uuid> = backlinks_d.iter().map(|c| c.id).collect();
     assert!(backlink_ids.contains(&card_a.id));
     assert!(!backlink_ids.contains(&card_b.id));
@@ -837,21 +958,27 @@ async fn test_backlinks_with_zettel_linking() {
     let card_service = CardService::new(db);
 
     // Create cards using zettel linking functionality
-    let card_a = card_service.create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
-        zettel_id: "ZETTEL-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        zettel_links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
+            zettel_id: "ZETTEL-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            zettel_links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
-        zettel_id: "ZETTEL-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        zettel_links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card_with_zettel_links(CreateCardWithZettelLinksRequest {
+            zettel_id: "ZETTEL-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            zettel_links: None,
+        })
+        .await
+        .unwrap();
 
     // Link A to B using zettel IDs
     let update_request = UpdateCardWithZettelLinksRequest {
@@ -861,7 +988,10 @@ async fn test_backlinks_with_zettel_linking() {
         topic_ids: None,
         zettel_links: Some(vec!["ZETTEL-B".to_string()]),
     };
-    card_service.update_card_with_zettel_links(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card_with_zettel_links(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Verify forward link
     let linked_cards = card_service.get_linked_cards(card_a.id).await.unwrap();
@@ -880,22 +1010,28 @@ async fn test_zettel_id_change_with_references() {
     let card_service = CardService::new(db);
 
     // Create a card with original Zettel ID
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "ORIGINAL-ID".to_string(),
-        title: None,
-        content: "This is the original card".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "ORIGINAL-ID".to_string(),
+            title: None,
+            content: "This is the original card".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Create another card that references the first card in its content
-    let _card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "REFERENCING-CARD".to_string(),
-        title: None,
-        content: "This card references ORIGINAL-ID in its text content".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let _card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "REFERENCING-CARD".to_string(),
+            title: None,
+            content: "This card references ORIGINAL-ID in its text content".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Create a third card that links to card A by UUID
     let update_request = UpdateCardRequest {
@@ -905,14 +1041,20 @@ async fn test_zettel_id_change_with_references() {
         topic_ids: None,
         links: Some(vec![card_a.id]),
     };
-    let card_c = card_service.create_card(CreateCardRequest {
-        zettel_id: "LINKING-CARD".to_string(),
-        title: None,
-        content: "This card has a UUID link to the original card".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
-    card_service.update_card(card_c.id, update_request).await.unwrap();
+    let card_c = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "LINKING-CARD".to_string(),
+            title: None,
+            content: "This card has a UUID link to the original card".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
+    card_service
+        .update_card(card_c.id, update_request)
+        .await
+        .unwrap();
 
     // Verify initial state
     let backlinks = card_service.get_backlinks(card_a.id).await.unwrap();
@@ -927,7 +1069,10 @@ async fn test_zettel_id_change_with_references() {
         topic_ids: None,
         links: None,
     };
-    let updated_card_a = card_service.update_card(card_a.id, update_request).await.unwrap();
+    let updated_card_a = card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
     assert!(updated_card_a.is_some());
     assert_eq!(updated_card_a.unwrap().zettel_id, "NEW-ID");
 
@@ -948,7 +1093,10 @@ async fn test_zettel_id_change_with_references() {
     assert_eq!(card_by_new_id.unwrap().id, card_a.id);
 
     // Verify that the old Zettel ID no longer resolves to the card
-    let card_by_old_id = card_service.get_card_by_zettel_id("ORIGINAL-ID").await.unwrap();
+    let card_by_old_id = card_service
+        .get_card_by_zettel_id("ORIGINAL-ID")
+        .await
+        .unwrap();
     assert!(card_by_old_id.is_none());
 }
 
@@ -958,21 +1106,27 @@ async fn test_zettel_id_duplicate_prevention() {
     let card_service = CardService::new(db);
 
     // Create two cards with different Zettel IDs
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "CARD-A".to_string(),
-        title: None,
-        content: "Card A".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "CARD-A".to_string(),
+            title: None,
+            content: "Card A".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let _card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "CARD-B".to_string(),
-        title: None,
-        content: "Card B".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let _card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "CARD-B".to_string(),
+            title: None,
+            content: "Card B".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Try to change card A's Zettel ID to card B's Zettel ID (should fail)
     let update_request = UpdateCardRequest {
@@ -998,29 +1152,38 @@ async fn test_zettel_id_change_preserves_all_relationships() {
     let card_service = CardService::new(db);
 
     // Create a complex linking scenario
-    let card_a = card_service.create_card(CreateCardRequest {
-        zettel_id: "CENTRAL-CARD".to_string(),
-        title: None,
-        content: "Central card with many relationships".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_a = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "CENTRAL-CARD".to_string(),
+            title: None,
+            content: "Central card with many relationships".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_b = card_service.create_card(CreateCardRequest {
-        zettel_id: "LINKED-CARD-1".to_string(),
-        title: None,
-        content: "Card 1".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_b = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "LINKED-CARD-1".to_string(),
+            title: None,
+            content: "Card 1".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
-    let card_c = card_service.create_card(CreateCardRequest {
-        zettel_id: "LINKED-CARD-2".to_string(),
-        title: None,
-        content: "Card 2".to_string(),
-        topic_ids: vec![],
-        links: None,
-    }).await.unwrap();
+    let card_c = card_service
+        .create_card(CreateCardRequest {
+            zettel_id: "LINKED-CARD-2".to_string(),
+            title: None,
+            content: "Card 2".to_string(),
+            topic_ids: vec![],
+            links: None,
+        })
+        .await
+        .unwrap();
 
     // Set up bidirectional links
     // A links to B and C
@@ -1031,9 +1194,12 @@ async fn test_zettel_id_change_preserves_all_relationships() {
         topic_ids: None,
         links: Some(vec![card_b.id, card_c.id]),
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
-    // B links to A  
+    // B links to A
     let update_request = UpdateCardRequest {
         zettel_id: None,
         title: None,
@@ -1041,7 +1207,10 @@ async fn test_zettel_id_change_preserves_all_relationships() {
         topic_ids: None,
         links: Some(vec![card_a.id]),
     };
-    card_service.update_card(card_b.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_b.id, update_request)
+        .await
+        .unwrap();
 
     // Verify initial state
     let forward_links_a = card_service.get_linked_cards(card_a.id).await.unwrap();
@@ -1061,7 +1230,10 @@ async fn test_zettel_id_change_preserves_all_relationships() {
         topic_ids: None,
         links: None,
     };
-    card_service.update_card(card_a.id, update_request).await.unwrap();
+    card_service
+        .update_card(card_a.id, update_request)
+        .await
+        .unwrap();
 
     // Verify all relationships are preserved
     let forward_links_a_after = card_service.get_linked_cards(card_a.id).await.unwrap();

@@ -1,16 +1,11 @@
 #[cfg(test)]
 mod parallel_grading_phase2_tests {
     use super::*;
-    use crate::{
-        api::*,
-        card_service::CardService,
-        llm_service::LLMService,
-        models::*,
-    };
+    use crate::{api::*, card_service::CardService, llm_service::LLMService, models::*};
     use axum::{
+        Router,
         body::Body,
         http::{Request, StatusCode},
-        Router,
     };
     use chrono::Utc;
     use serde_json::json;
@@ -161,11 +156,26 @@ mod parallel_grading_phase2_tests {
         let (app, session_id, card_id, questions) = setup_parallel_test_app().await;
 
         let answers = vec![
-            QuestionAnswer { question_index: 0, answer: "Concurrent execution reduces total processing time".to_string() },
-            QuestionAnswer { question_index: 1, answer: "C) Async/await with tokio".to_string() },
-            QuestionAnswer { question_index: 2, answer: "Concurrency deals with structure, parallelism with execution".to_string() },
-            QuestionAnswer { question_index: 3, answer: "D) All of the above".to_string() },
-            QuestionAnswer { question_index: 4, answer: "It schedules async tasks across multiple threads".to_string() },
+            QuestionAnswer {
+                question_index: 0,
+                answer: "Concurrent execution reduces total processing time".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 1,
+                answer: "C) Async/await with tokio".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 2,
+                answer: "Concurrency deals with structure, parallelism with execution".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 3,
+                answer: "D) All of the above".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 4,
+                answer: "It schedules async tasks across multiple threads".to_string(),
+            },
         ];
 
         // Test sequential processing (existing batch endpoint)
@@ -208,7 +218,9 @@ mod parallel_grading_phase2_tests {
                         session_id, card_id
                     ))
                     .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&parallel_request).unwrap()))
+                    .body(Body::from(
+                        serde_json::to_string(&parallel_request).unwrap(),
+                    ))
                     .unwrap(),
             )
             .await;
@@ -218,11 +230,15 @@ mod parallel_grading_phase2_tests {
         match parallel_response {
             Ok(response) if response.status() == StatusCode::OK => {
                 let parallel_time = parallel_start.elapsed();
-                
+
                 // Parallel should be faster (at least 20% improvement expected)
-                let improvement_ratio = sequential_time.as_millis() as f64 / parallel_time.as_millis() as f64;
-                assert!(improvement_ratio >= 1.2, "Parallel processing should be at least 20% faster");
-                
+                let improvement_ratio =
+                    sequential_time.as_millis() as f64 / parallel_time.as_millis() as f64;
+                assert!(
+                    improvement_ratio >= 1.2,
+                    "Parallel processing should be at least 20% faster"
+                );
+
                 println!("Performance improvement: {:.2}x faster", improvement_ratio);
             }
             _ => {
@@ -239,9 +255,18 @@ mod parallel_grading_phase2_tests {
 
         let mixed_request = ParallelAnswerRequest {
             answers: vec![
-                QuestionAnswer { question_index: 0, answer: "Valid answer".to_string() },
-                QuestionAnswer { question_index: 999, answer: "Invalid index".to_string() }, // Should fail
-                QuestionAnswer { question_index: 2, answer: "Another valid answer".to_string() },
+                QuestionAnswer {
+                    question_index: 0,
+                    answer: "Valid answer".to_string(),
+                },
+                QuestionAnswer {
+                    question_index: 999,
+                    answer: "Invalid index".to_string(),
+                }, // Should fail
+                QuestionAnswer {
+                    question_index: 2,
+                    answer: "Another valid answer".to_string(),
+                },
             ],
             processing_mode: Some("parallel".to_string()),
         };
@@ -263,9 +288,11 @@ mod parallel_grading_phase2_tests {
         match response {
             Ok(response) if response.status() == StatusCode::OK => {
                 // Should handle partial failures and return results for valid indices
-                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
                 let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                
+
                 // Should return results for valid questions only
                 let results = json_response["data"].as_array().unwrap();
                 assert_eq!(results.len(), 2); // Only valid questions processed
@@ -287,10 +314,22 @@ mod parallel_grading_phase2_tests {
 
         // Submit answers out of order to test result preservation
         let out_of_order_answers = vec![
-            QuestionAnswer { question_index: 3, answer: "Fourth answer".to_string() },
-            QuestionAnswer { question_index: 1, answer: "Second answer".to_string() },
-            QuestionAnswer { question_index: 0, answer: "First answer".to_string() },
-            QuestionAnswer { question_index: 2, answer: "Third answer".to_string() },
+            QuestionAnswer {
+                question_index: 3,
+                answer: "Fourth answer".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 1,
+                answer: "Second answer".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 0,
+                answer: "First answer".to_string(),
+            },
+            QuestionAnswer {
+                question_index: 2,
+                answer: "Third answer".to_string(),
+            },
         ];
 
         let request = ParallelAnswerRequest {
@@ -314,12 +353,14 @@ mod parallel_grading_phase2_tests {
 
         match response {
             Ok(response) if response.status() == StatusCode::OK => {
-                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
                 let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                
+
                 let results = json_response["data"].as_array().unwrap();
                 assert_eq!(results.len(), 4);
-                
+
                 // Results should be ordered by question_id regardless of submission order
                 assert_eq!(results[0]["question_id"], "1"); // First question
                 assert_eq!(results[1]["question_id"], "2"); // Second question
@@ -369,17 +410,26 @@ mod parallel_grading_phase2_tests {
         match response {
             Ok(response) if response.status() == StatusCode::OK => {
                 let elapsed = start_time.elapsed();
-                
-                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
                 let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                
+
                 let results = json_response["data"].as_array().unwrap();
                 assert_eq!(results.len(), 20);
-                
+
                 // Should complete within reasonable time despite large batch
-                assert!(elapsed.as_secs() < 10, "Large batch processing took too long");
-                
-                println!("Processed {} questions in {}ms", results.len(), elapsed.as_millis());
+                assert!(
+                    elapsed.as_secs() < 10,
+                    "Large batch processing took too long"
+                );
+
+                println!(
+                    "Processed {} questions in {}ms",
+                    results.len(),
+                    elapsed.as_millis()
+                );
             }
             _ => {
                 println!("Parallel endpoint not yet implemented");
@@ -394,8 +444,14 @@ mod parallel_grading_phase2_tests {
 
         let request = ParallelAnswerRequest {
             answers: vec![
-                QuestionAnswer { question_index: 0, answer: "Test answer 1".to_string() },
-                QuestionAnswer { question_index: 1, answer: "Test answer 2".to_string() },
+                QuestionAnswer {
+                    question_index: 0,
+                    answer: "Test answer 1".to_string(),
+                },
+                QuestionAnswer {
+                    question_index: 1,
+                    answer: "Test answer 2".to_string(),
+                },
             ],
             processing_mode: Some("parallel_with_failure".to_string()), // Mock failure mode
         };
@@ -417,14 +473,16 @@ mod parallel_grading_phase2_tests {
         match response {
             Ok(response) if response.status() == StatusCode::OK => {
                 // Should still succeed due to fallback mechanism
-                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
                 let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                
+
                 assert_eq!(json_response["success"], true);
-                
+
                 let results = json_response["data"].as_array().unwrap();
                 assert_eq!(results.len(), 2);
-                
+
                 // Verify fallback was used (could be indicated in response metadata)
                 if let Some(metadata) = json_response.get("metadata") {
                     assert_eq!(metadata["processing_mode"], "sequential_fallback");
@@ -442,9 +500,10 @@ mod parallel_grading_phase2_tests {
         let (app, session_id, card_id, _) = setup_parallel_test_app().await;
 
         let request = ParallelAnswerRequest {
-            answers: vec![
-                QuestionAnswer { question_index: 0, answer: "Resource test".to_string() },
-            ],
+            answers: vec![QuestionAnswer {
+                question_index: 0,
+                answer: "Resource test".to_string(),
+            }],
             processing_mode: Some("parallel".to_string()),
         };
 
@@ -512,14 +571,19 @@ mod parallel_grading_phase2_tests {
 
         match response {
             Ok(response) if response.status() == StatusCode::OK => {
-                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
                 let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                
+
                 let results = json_response["data"].as_array().unwrap();
                 assert_eq!(results.len(), 100);
-                
+
                 // Memory usage should be bounded even with large parallel processing
-                println!("Successfully processed {} large answers in parallel", results.len());
+                println!(
+                    "Successfully processed {} large answers in parallel",
+                    results.len()
+                );
             }
             _ => {
                 println!("Parallel endpoint not yet implemented");
@@ -534,9 +598,18 @@ mod parallel_grading_phase2_tests {
 
         let request = ParallelAnswerRequest {
             answers: vec![
-                QuestionAnswer { question_index: 0, answer: "Metrics test 1".to_string() },
-                QuestionAnswer { question_index: 1, answer: "Metrics test 2".to_string() },
-                QuestionAnswer { question_index: 2, answer: "Metrics test 3".to_string() },
+                QuestionAnswer {
+                    question_index: 0,
+                    answer: "Metrics test 1".to_string(),
+                },
+                QuestionAnswer {
+                    question_index: 1,
+                    answer: "Metrics test 2".to_string(),
+                },
+                QuestionAnswer {
+                    question_index: 2,
+                    answer: "Metrics test 3".to_string(),
+                },
             ],
             processing_mode: Some("parallel".to_string()),
         };
@@ -557,16 +630,18 @@ mod parallel_grading_phase2_tests {
 
         match response {
             Ok(response) if response.status() == StatusCode::OK => {
-                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
                 let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                
+
                 // Response should include processing metrics
                 if let Some(metrics) = json_response.get("metrics") {
                     assert!(metrics.get("total_processing_time_ms").is_some());
                     assert!(metrics.get("parallel_tasks_spawned").is_some());
                     assert!(metrics.get("concurrent_execution_count").is_some());
                     assert!(metrics.get("average_task_duration_ms").is_some());
-                    
+
                     println!("Parallel processing metrics: {:#}", metrics);
                 }
             }

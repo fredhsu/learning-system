@@ -1,16 +1,11 @@
 #[cfg(test)]
 mod batch_grading_tests {
     use super::*;
-    use crate::{
-        api::*,
-        card_service::CardService,
-        llm_service::LLMService,
-        models::*,
-    };
+    use crate::{api::*, card_service::CardService, llm_service::LLMService, models::*};
     use axum::{
+        Router,
         body::Body,
         http::{Request, StatusCode},
-        Router,
     };
     use chrono::Utc;
     use serde_json::json;
@@ -27,7 +22,9 @@ mod batch_grading_tests {
         setup_test_app_with_llm_service(LLMService::new_mock_with_mixed_results()).await
     }
 
-    async fn setup_test_app_with_llm_service(llm_service: LLMService) -> (Router, Uuid, Uuid, Uuid) {
+    async fn setup_test_app_with_llm_service(
+        llm_service: LLMService,
+    ) -> (Router, Uuid, Uuid, Uuid) {
         let card_service = CardService::new_in_memory().await.unwrap();
         let review_sessions = Arc::new(Mutex::new(HashMap::new()));
 
@@ -133,11 +130,13 @@ mod batch_grading_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json_response["success"], true);
-        
+
         let results = json_response["data"].as_array().unwrap();
         assert_eq!(results.len(), 2);
 
@@ -303,7 +302,9 @@ mod batch_grading_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         let results = json_response["data"].as_array().unwrap();
@@ -315,7 +316,7 @@ mod batch_grading_tests {
 
         // First answer should be correct
         assert!(results[0]["is_correct"].as_bool().unwrap());
-        
+
         // Second answer should be incorrect
         assert!(!results[1]["is_correct"].as_bool().unwrap());
     }
@@ -354,13 +355,15 @@ mod batch_grading_tests {
         let elapsed = start_time.elapsed();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         // Performance assertion: batch should complete successfully
         // Mock services have a 10ms delay, so with 10 answers and overhead, expect < 1 second
         assert!(elapsed.as_millis() < 1000); // 1 second should be plenty for mock
-        
+
         // Verify we got all responses back
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let results = json_response["data"].as_array().unwrap();
         assert_eq!(results.len(), 10);
@@ -394,7 +397,9 @@ mod batch_grading_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         // Verify response structure matches ApiResponse<Vec<BatchGradingResult>>
@@ -408,7 +413,7 @@ mod batch_grading_tests {
             assert!(result.get("is_correct").is_some());
             assert!(result.get("feedback").is_some());
             assert!(result.get("suggested_rating").is_some());
-            
+
             // Verify suggested_rating is in valid range
             let rating = result["suggested_rating"].as_i64().unwrap();
             assert!(rating >= 1 && rating <= 4);
@@ -449,7 +454,9 @@ mod batch_grading_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         let results = json_response["data"].as_array().unwrap();

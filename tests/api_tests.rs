@@ -1,10 +1,10 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
-use serde_json::{json, Value};
-use learning_system::{api::*, CardService, Database, LLMService};
-use uuid::Uuid;
+use learning_system::{CardService, Database, LLMService, api::*};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 async fn create_test_server() -> TestServer {
     let db = Database::new("sqlite::memory:").await.unwrap();
@@ -15,7 +15,7 @@ async fn create_test_server() -> TestServer {
         llm_service,
         review_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
-    
+
     let app = create_router(app_state);
     TestServer::new(app).unwrap()
 }
@@ -23,7 +23,7 @@ async fn create_test_server() -> TestServer {
 #[tokio::test]
 async fn test_api_create_card() {
     let server = create_test_server().await;
-    
+
     let request_body = json!({
         "zettel_id": "API-001",
         "content": "Test API card creation",
@@ -31,10 +31,7 @@ async fn test_api_create_card() {
         "links": null
     });
 
-    let response = server
-        .post("/api/cards")
-        .json(&request_body)
-        .await;
+    let response = server.post("/api/cards").json(&request_body).await;
 
     response.assert_status_ok();
     let body: Value = response.json();
@@ -47,7 +44,7 @@ async fn test_api_create_card() {
 #[tokio::test]
 async fn test_api_get_all_cards() {
     let server = create_test_server().await;
-    
+
     // First create a card
     let create_request = json!({
         "zettel_id": "API-002",
@@ -56,16 +53,13 @@ async fn test_api_get_all_cards() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
 
     // Then get all cards
     let get_response = server.get("/api/cards").await;
     get_response.assert_status_ok();
-    
+
     let body: Value = get_response.json();
     assert_eq!(body["success"], true);
     assert!(body["data"].is_array());
@@ -76,7 +70,7 @@ async fn test_api_get_all_cards() {
 #[tokio::test]
 async fn test_api_get_single_card() {
     let server = create_test_server().await;
-    
+
     // Create a card first
     let create_request = json!({
         "zettel_id": "API-003",
@@ -85,21 +79,16 @@ async fn test_api_get_single_card() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
-    
+
     let create_body: Value = create_response.json();
     let card_id = create_body["data"]["id"].as_str().unwrap();
 
     // Get the specific card
-    let get_response = server
-        .get(&format!("/api/cards/{}", card_id))
-        .await;
+    let get_response = server.get(&format!("/api/cards/{}", card_id)).await;
     get_response.assert_status_ok();
-    
+
     let get_body: Value = get_response.json();
     assert_eq!(get_body["success"], true);
     assert_eq!(get_body["data"]["content"], "Single card test");
@@ -109,19 +98,17 @@ async fn test_api_get_single_card() {
 #[tokio::test]
 async fn test_api_get_nonexistent_card() {
     let server = create_test_server().await;
-    
+
     let fake_id = Uuid::new_v4();
-    let response = server
-        .get(&format!("/api/cards/{}", fake_id))
-        .await;
-    
+    let response = server.get(&format!("/api/cards/{}", fake_id)).await;
+
     response.assert_status(StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_api_update_card() {
     let server = create_test_server().await;
-    
+
     // Create a card first
     let create_request = json!({
         "zettel_id": "API-004",
@@ -130,12 +117,9 @@ async fn test_api_update_card() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
-    
+
     let create_body: Value = create_response.json();
     let card_id = create_body["data"]["id"].as_str().unwrap();
 
@@ -151,7 +135,7 @@ async fn test_api_update_card() {
         .json(&update_request)
         .await;
     update_response.assert_status_ok();
-    
+
     let update_body: Value = update_response.json();
     assert_eq!(update_body["success"], true);
     assert_eq!(update_body["data"]["content"], "Updated content via API");
@@ -161,7 +145,7 @@ async fn test_api_update_card() {
 #[tokio::test]
 async fn test_api_update_nonexistent_card() {
     let server = create_test_server().await;
-    
+
     let fake_id = Uuid::new_v4();
     let update_request = json!({
         "zettel_id": "API-006",
@@ -173,14 +157,14 @@ async fn test_api_update_nonexistent_card() {
         .put(&format!("/api/cards/{}", fake_id))
         .json(&update_request)
         .await;
-    
+
     response.assert_status(StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_api_delete_card() {
     let server = create_test_server().await;
-    
+
     // Create a card first
     let create_request = json!({
         "zettel_id": "API-007",
@@ -189,48 +173,39 @@ async fn test_api_delete_card() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
-    
+
     let create_body: Value = create_response.json();
     let card_id = create_body["data"]["id"].as_str().unwrap();
 
     // Delete the card
-    let delete_response = server
-        .delete(&format!("/api/cards/{}", card_id))
-        .await;
+    let delete_response = server.delete(&format!("/api/cards/{}", card_id)).await;
     delete_response.assert_status_ok();
-    
+
     let delete_body: Value = delete_response.json();
     assert_eq!(delete_body["success"], true);
     assert_eq!(delete_body["data"], true);
 
     // Verify the card is gone
-    let get_response = server
-        .get(&format!("/api/cards/{}", card_id))
-        .await;
+    let get_response = server.get(&format!("/api/cards/{}", card_id)).await;
     get_response.assert_status(StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_api_delete_nonexistent_card() {
     let server = create_test_server().await;
-    
+
     let fake_id = Uuid::new_v4();
-    let response = server
-        .delete(&format!("/api/cards/{}", fake_id))
-        .await;
-    
+    let response = server.delete(&format!("/api/cards/{}", fake_id)).await;
+
     response.assert_status(StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_api_cards_due_for_review() {
     let server = create_test_server().await;
-    
+
     // Create a card
     let create_request = json!({
         "zettel_id": "API-008",
@@ -239,16 +214,13 @@ async fn test_api_cards_due_for_review() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
 
     // Get cards due for review
     let due_response = server.get("/api/cards/due").await;
     due_response.assert_status_ok();
-    
+
     let due_body: Value = due_response.json();
     assert_eq!(due_body["success"], true);
     assert!(due_body["data"].is_array());
@@ -259,16 +231,13 @@ async fn test_api_cards_due_for_review() {
 #[tokio::test]
 async fn test_api_create_topic() {
     let server = create_test_server().await;
-    
+
     let request_body = json!({
         "name": "API Test Topic",
         "description": "Topic created via API"
     });
 
-    let response = server
-        .post("/api/topics")
-        .json(&request_body)
-        .await;
+    let response = server.post("/api/topics").json(&request_body).await;
 
     response.assert_status_ok();
     let body: Value = response.json();
@@ -280,23 +249,20 @@ async fn test_api_create_topic() {
 #[tokio::test]
 async fn test_api_get_topics() {
     let server = create_test_server().await;
-    
+
     // Create a topic first
     let create_request = json!({
         "name": "Topic for GET test",
         "description": null
     });
 
-    let create_response = server
-        .post("/api/topics")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/topics").json(&create_request).await;
     create_response.assert_status_ok();
 
     // Get all topics
     let get_response = server.get("/api/topics").await;
     get_response.assert_status_ok();
-    
+
     let body: Value = get_response.json();
     assert_eq!(body["success"], true);
     assert!(body["data"].is_array());
@@ -307,7 +273,7 @@ async fn test_api_get_topics() {
 #[tokio::test]
 async fn test_api_review_card() {
     let server = create_test_server().await;
-    
+
     // Create a card first
     let create_request = json!({
         "zettel_id": "API-009",
@@ -316,12 +282,9 @@ async fn test_api_review_card() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
-    
+
     let create_body: Value = create_response.json();
     let card_id = create_body["data"]["id"].as_str().unwrap();
 
@@ -335,7 +298,7 @@ async fn test_api_review_card() {
         .json(&review_request)
         .await;
     review_response.assert_status_ok();
-    
+
     let review_body: Value = review_response.json();
     assert_eq!(review_body["success"], true);
     assert_eq!(review_body["data"]["reps"], 1);
@@ -344,39 +307,36 @@ async fn test_api_review_card() {
 #[tokio::test]
 async fn test_api_invalid_json() {
     let server = create_test_server().await;
-    
+
     // Try to create a card with invalid JSON
     let response = server
         .post("/api/cards")
         .add_header("content-type", "application/json")
         .text("invalid json")
         .await;
-    
+
     response.assert_status(StatusCode::UNSUPPORTED_MEDIA_TYPE);
 }
 
 #[tokio::test]
 async fn test_api_missing_fields() {
     let server = create_test_server().await;
-    
+
     // Try to create a card without required fields
     let request_body = json!({
         "topic_ids": []
         // Missing "content" field
     });
 
-    let response = server
-        .post("/api/cards")
-        .json(&request_body)
-        .await;
-    
+    let response = server.post("/api/cards").json(&request_body).await;
+
     response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
 async fn test_api_card_with_links() {
     let server = create_test_server().await;
-    
+
     // Create first card
     let create_request1 = json!({
         "zettel_id": "API-010",
@@ -385,12 +345,9 @@ async fn test_api_card_with_links() {
         "zettel_links": null
     });
 
-    let create_response1 = server
-        .post("/api/cards")
-        .json(&create_request1)
-        .await;
+    let create_response1 = server.post("/api/cards").json(&create_request1).await;
     create_response1.assert_status_ok();
-    
+
     let create_body1: Value = create_response1.json();
     let card1_id = create_body1["data"]["id"].as_str().unwrap();
 
@@ -402,21 +359,16 @@ async fn test_api_card_with_links() {
         "zettel_links": ["API-010"]
     });
 
-    let create_response2 = server
-        .post("/api/cards")
-        .json(&create_request2)
-        .await;
+    let create_response2 = server.post("/api/cards").json(&create_request2).await;
     create_response2.assert_status_ok();
-    
+
     let create_body2: Value = create_response2.json();
     let card2_id = create_body2["data"]["id"].as_str().unwrap();
-    
+
     // Get linked cards
-    let links_response = server
-        .get(&format!("/api/cards/{}/links", card2_id))
-        .await;
+    let links_response = server.get(&format!("/api/cards/{}/links", card2_id)).await;
     links_response.assert_status_ok();
-    
+
     let links_body: Value = links_response.json();
     assert_eq!(links_body["success"], true);
     assert!(links_body["data"].is_array());
@@ -427,7 +379,7 @@ async fn test_api_card_with_links() {
 #[tokio::test]
 async fn test_api_search_cards() {
     let server = create_test_server().await;
-    
+
     // Create multiple cards with searchable content
     let search_test_cards = vec![
         "Mathematics: quadratic equations and formulas",
@@ -444,50 +396,39 @@ async fn test_api_search_cards() {
             "links": null
         });
 
-        let create_response = server
-            .post("/api/cards")
-            .json(&create_request)
-            .await;
+        let create_response = server.post("/api/cards").json(&create_request).await;
         create_response.assert_status_ok();
     }
 
     // Test search functionality
-    let search_response = server
-        .get("/api/cards/search?q=mathematics")
-        .await;
+    let search_response = server.get("/api/cards/search?q=mathematics").await;
     search_response.assert_status_ok();
-    
+
     let search_body: Value = search_response.json();
     assert_eq!(search_body["success"], true);
     assert!(search_body["data"].is_array());
     assert_eq!(search_body["data"].as_array().unwrap().len(), 2); // Should find 2 cards
 
     // Test case-insensitive search
-    let search_response = server
-        .get("/api/cards/search?q=PROGRAMMING")
-        .await;
+    let search_response = server.get("/api/cards/search?q=PROGRAMMING").await;
     search_response.assert_status_ok();
-    
+
     let search_body: Value = search_response.json();
     assert_eq!(search_body["success"], true);
     assert_eq!(search_body["data"].as_array().unwrap().len(), 1); // Should find 1 card
 
     // Test search with no results
-    let search_response = server
-        .get("/api/cards/search?q=nonexistent")
-        .await;
+    let search_response = server.get("/api/cards/search?q=nonexistent").await;
     search_response.assert_status_ok();
-    
+
     let search_body: Value = search_response.json();
     assert_eq!(search_body["success"], true);
     assert_eq!(search_body["data"].as_array().unwrap().len(), 0); // Should find no cards
 
     // Test search with empty query (should return all cards)
-    let search_response = server
-        .get("/api/cards/search?q=")
-        .await;
+    let search_response = server.get("/api/cards/search?q=").await;
     search_response.assert_status_ok();
-    
+
     let search_body: Value = search_response.json();
     assert_eq!(search_body["success"], true);
     assert_eq!(search_body["data"].as_array().unwrap().len(), 4); // Should return all cards
@@ -496,7 +437,7 @@ async fn test_api_search_cards() {
 #[tokio::test]
 async fn test_api_search_url_encoding() {
     let server = create_test_server().await;
-    
+
     // Create a card with special characters
     let create_request = json!({
         "zettel_id": "API-012",
@@ -505,18 +446,13 @@ async fn test_api_search_url_encoding() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
 
     // Test search with URL-encoded special characters
-    let search_response = server
-        .get("/api/cards/search?q=Special%20chars")
-        .await;
+    let search_response = server.get("/api/cards/search?q=Special%20chars").await;
     search_response.assert_status_ok();
-    
+
     let search_body: Value = search_response.json();
     assert_eq!(search_body["success"], true);
     assert_eq!(search_body["data"].as_array().unwrap().len(), 1);
@@ -525,7 +461,7 @@ async fn test_api_search_url_encoding() {
 #[tokio::test]
 async fn test_api_response_structure() {
     let server = create_test_server().await;
-    
+
     // Test that all API responses follow the expected structure
     let create_request = json!({
         "zettel_id": "API-013",
@@ -534,19 +470,16 @@ async fn test_api_response_structure() {
         "links": null
     });
 
-    let create_response = server
-        .post("/api/cards")
-        .json(&create_request)
-        .await;
+    let create_response = server.post("/api/cards").json(&create_request).await;
     create_response.assert_status_ok();
-    
+
     let create_body: Value = create_response.json();
-    
+
     // Verify response structure
     assert!(create_body.get("success").is_some());
     assert!(create_body.get("data").is_some());
     assert_eq!(create_body["success"], true);
-    
+
     // Verify card data structure contains expected fields
     let card_data = &create_body["data"];
     assert!(card_data.get("id").is_some());
@@ -560,16 +493,14 @@ async fn test_api_response_structure() {
 #[tokio::test]
 async fn test_api_error_response_format() {
     let server = create_test_server().await;
-    
+
     // Test that error responses have the expected JSON structure
     let fake_id = Uuid::new_v4();
-    let response = server
-        .get(&format!("/api/cards/{}", fake_id))
-        .await;
-    
+    let response = server.get(&format!("/api/cards/{}", fake_id)).await;
+
     response.assert_status(StatusCode::NOT_FOUND);
     let body: Value = response.json();
-    
+
     // Verify the error response has the expected structure
     assert_eq!(body["success"], false);
     assert!(body["error"].is_string());

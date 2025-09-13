@@ -1,12 +1,11 @@
 use anyhow::Result;
+use futures_util::future;
 use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use futures_util::future;
 
-use crate::llm_providers::{LLMProvider, LLMProviderFactory, LLMProviderType, JsonResponseParser};
+use crate::llm_providers::{JsonResponseParser, LLMProvider, LLMProviderFactory, LLMProviderType};
 use crate::models::{BatchGradingRequest, BatchGradingResult, Card, QuizQuestion};
-
 
 use serde::{Deserialize, Serialize};
 
@@ -40,17 +39,12 @@ impl LLMService {
     }
 
     pub fn new_with_provider(
-        api_key: String, 
-        base_url: Option<String>, 
+        api_key: String,
+        base_url: Option<String>,
         provider_type: LLMProviderType,
-        model: Option<String>
+        model: Option<String>,
     ) -> Self {
-        let provider = LLMProviderFactory::create_provider(
-            provider_type,
-            api_key,
-            base_url,
-            model,
-        );
+        let provider = LLMProviderFactory::create_provider(provider_type, api_key, base_url, model);
 
         Self {
             provider,
@@ -61,10 +55,10 @@ impl LLMService {
     #[allow(dead_code)]
     pub fn new_gemini(api_key: String, model: Option<String>) -> Self {
         Self::new_with_provider(
-            api_key, 
-            None, 
+            api_key,
+            None,
             LLMProviderType::Gemini,
-            model.or_else(|| Some("gemini-2.0-flash-exp".to_string()))
+            model.or_else(|| Some("gemini-2.0-flash-exp".to_string())),
         )
     }
 
@@ -73,7 +67,11 @@ impl LLMService {
         self.make_llm_request_with_system(None, prompt).await
     }
 
-    async fn make_llm_request_with_system(&self, system_message: Option<&str>, prompt: &str) -> Result<String> {
+    async fn make_llm_request_with_system(
+        &self,
+        system_message: Option<&str>,
+        prompt: &str,
+    ) -> Result<String> {
         self.provider.make_request(system_message, prompt).await
     }
 
@@ -104,11 +102,11 @@ impl LLMService {
 
     #[cfg(test)]
     pub fn new_mock_with_mixed_results() -> Self {
-        use crate::llm_providers::{MockProvider};
-        
+        use crate::llm_providers::MockProvider;
+
         let provider = LLMProvider::Mock(MockProvider::new_mixed());
         let json_parser = JsonResponseParser::new();
-        
+
         Self {
             provider,
             json_parser,
@@ -117,11 +115,11 @@ impl LLMService {
 
     #[cfg(test)]
     fn new_mock_internal(correct_answers: bool, batch_fails: bool) -> Self {
-        use crate::llm_providers::{MockProvider};
-        
+        use crate::llm_providers::MockProvider;
+
         let provider = LLMProvider::Mock(MockProvider::new(correct_answers, batch_fails));
         let json_parser = JsonResponseParser::new();
-        
+
         Self {
             provider,
             json_parser,
@@ -166,7 +164,9 @@ impl LLMService {
         );
 
         let system_message = "You are a university professor. Always respond with valid JSON in the requested format.";
-        let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
+        let response_text = self
+            .make_llm_request_with_system(Some(system_message), &prompt)
+            .await?;
 
         {
             debug!(
@@ -174,7 +174,7 @@ impl LLMService {
                 response_content = %response_text,
                 "Raw LLM response for quiz generation"
             );
-            
+
             let json_content = JsonResponseParser::extract_json_from_response(&response_text);
             debug!(
                 card_id = %card.id,
@@ -182,7 +182,10 @@ impl LLMService {
                 "Extracted JSON from LLM response"
             );
 
-            match self.json_parser.parse_json_response::<GeneratedQuiz>(&response_text) {
+            match self
+                .json_parser
+                .parse_json_response::<GeneratedQuiz>(&response_text)
+            {
                 Ok(generated_quiz) => {
                     info!(
                         card_id = %card.id,
@@ -204,7 +207,10 @@ impl LLMService {
         }
     }
 
-    pub async fn generate_batch_quiz_questions(&self, cards: &[Card]) -> Result<HashMap<Uuid, Vec<QuizQuestion>>> {
+    pub async fn generate_batch_quiz_questions(
+        &self,
+        cards: &[Card],
+    ) -> Result<HashMap<Uuid, Vec<QuizQuestion>>> {
         if cards.is_empty() {
             return Ok(HashMap::new());
         }
@@ -216,20 +222,25 @@ impl LLMService {
         );
 
         // Create card summaries for the prompt
-        let card_summaries = cards.iter().enumerate().map(|(i, card)| {
-            format!(
-                "Card {}: ID={}, Zettel_ID={}, Content={}",
-                i + 1,
-                card.id,
-                card.zettel_id,
-                // Truncate content to avoid overly long prompts
-                if card.content.len() > 500 {
-                    format!("{}...", &card.content[..500])
-                } else {
-                    card.content.clone()
-                }
-            )
-        }).collect::<Vec<_>>().join("\n\n");
+        let card_summaries = cards
+            .iter()
+            .enumerate()
+            .map(|(i, card)| {
+                format!(
+                    "Card {}: ID={}, Zettel_ID={}, Content={}",
+                    i + 1,
+                    card.id,
+                    card.zettel_id,
+                    // Truncate content to avoid overly long prompts
+                    if card.content.len() > 500 {
+                        format!("{}...", &card.content[..500])
+                    } else {
+                        card.content.clone()
+                    }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
 
         let prompt = format!(
             r#"Generate 2-3 quiz questions for each of the following learning cards. The questions should be varied in type (multiple choice, short answer, or problem-solving) and test key concepts.
@@ -269,11 +280,16 @@ Guidelines:
 - Use the exact card IDs provided above as keys in the results object"#,
             card_summaries,
             cards.first().map(|c| c.id.to_string()).unwrap_or_default(),
-            cards.get(1).map(|c| c.id.to_string()).unwrap_or(cards.first().map(|c| c.id.to_string()).unwrap_or_default())
+            cards
+                .get(1)
+                .map(|c| c.id.to_string())
+                .unwrap_or(cards.first().map(|c| c.id.to_string()).unwrap_or_default())
         );
 
         let system_message = "You are a university professor creating quiz questions. Always respond with valid JSON in the exact requested format. Use the provided card IDs as keys.";
-        let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
+        let response_text = self
+            .make_llm_request_with_system(Some(system_message), &prompt)
+            .await?;
 
         {
             debug!(
@@ -281,7 +297,7 @@ Guidelines:
                 response_content = %response_text,
                 "Raw LLM response for batch quiz generation"
             );
-            
+
             let json_content = JsonResponseParser::extract_json_from_response(&response_text);
             debug!(
                 card_count = cards.len(),
@@ -289,7 +305,10 @@ Guidelines:
                 "Extracted JSON from batch quiz response"
             );
 
-            match self.json_parser.parse_json_response::<BatchGeneratedQuiz>(&response_text) {
+            match self
+                .json_parser
+                .parse_json_response::<BatchGeneratedQuiz>(&response_text)
+            {
                 Ok(batch_quiz) => {
                     // Convert string keys to UUIDs
                     let mut result = HashMap::new();
@@ -303,7 +322,7 @@ Guidelines:
                             );
                         }
                     }
-                    
+
                     info!(
                         card_count = cards.len(),
                         generated_count = result.len(),
@@ -326,12 +345,15 @@ Guidelines:
         }
     }
 
-    async fn fallback_to_individual_generation(&self, cards: &[Card]) -> Result<HashMap<Uuid, Vec<QuizQuestion>>> {
+    async fn fallback_to_individual_generation(
+        &self,
+        cards: &[Card],
+    ) -> Result<HashMap<Uuid, Vec<QuizQuestion>>> {
         info!(
             card_count = cards.len(),
             "Falling back to individual question generation for cards"
         );
-        
+
         let mut result = HashMap::new();
         for card in cards {
             match self.generate_quiz_questions(card).await {
@@ -430,7 +452,9 @@ Guidelines:
         );
 
         let system_message = "You are an expert teacher focused on fair, understanding-based grading. Prioritize semantic meaning over exact text matching. Accept equivalent answers that demonstrate understanding. Always respond with valid JSON in the requested format.";
-        let response_text = self.make_llm_request_with_system(Some(system_message), &prompt).await?;
+        let response_text = self
+            .make_llm_request_with_system(Some(system_message), &prompt)
+            .await?;
 
         {
             debug!(
@@ -438,7 +462,7 @@ Guidelines:
                 response_content = %response_text,
                 "Raw LLM response for answer grading"
             );
-            
+
             let json_content = JsonResponseParser::extract_json_from_response(&response_text);
             debug!(
                 card_id = %card.id,
@@ -446,7 +470,10 @@ Guidelines:
                 "Extracted JSON from grading response"
             );
 
-            match self.json_parser.parse_json_response::<GradingResult>(&response_text) {
+            match self
+                .json_parser
+                .parse_json_response::<GradingResult>(&response_text)
+            {
                 Ok(grading_result) => {
                     info!(
                         card_id = %card.id,
@@ -490,7 +517,10 @@ Guidelines:
     }
 
     #[allow(dead_code)]
-    pub async fn grade_batch_answers(&self, grading_requests: &[BatchGradingRequest]) -> Result<Vec<BatchGradingResult>> {
+    pub async fn grade_batch_answers(
+        &self,
+        grading_requests: &[BatchGradingRequest],
+    ) -> Result<Vec<BatchGradingResult>> {
         if grading_requests.is_empty() {
             return Ok(Vec::new());
         }
@@ -564,7 +594,10 @@ Focus on conceptual understanding rather than exact text matching."#,
         );
 
         let system_message = "You are an expert teacher focused on fair, understanding-based grading. Prioritize semantic meaning over exact text matching. Accept equivalent answers that demonstrate understanding. Always respond with valid JSON array in the requested format.";
-        let response_text = match self.make_llm_request_with_system(Some(system_message), &prompt).await {
+        let response_text = match self
+            .make_llm_request_with_system(Some(system_message), &prompt)
+            .await
+        {
             Ok(text) => text,
             Err(e) => {
                 error!(
@@ -581,7 +614,7 @@ Focus on conceptual understanding rather than exact text matching."#,
             response_content = %response_text,
             "Raw LLM response for batch grading"
         );
-        
+
         let json_content = JsonResponseParser::extract_json_from_response(&response_text);
         debug!(
             request_count = grading_requests.len(),
@@ -589,7 +622,10 @@ Focus on conceptual understanding rather than exact text matching."#,
             "Extracted JSON from batch grading response"
         );
 
-        match self.json_parser.parse_json_response::<Vec<BatchGradingResult>>(&response_text) {
+        match self
+            .json_parser
+            .parse_json_response::<Vec<BatchGradingResult>>(&response_text)
+        {
             Ok(results) => {
                 info!(
                     request_count = grading_requests.len(),
@@ -612,12 +648,15 @@ Focus on conceptual understanding rather than exact text matching."#,
     }
 
     #[allow(dead_code)]
-    async fn fallback_to_individual_grading(&self, grading_requests: &[BatchGradingRequest]) -> Result<Vec<BatchGradingResult>> {
+    async fn fallback_to_individual_grading(
+        &self,
+        grading_requests: &[BatchGradingRequest],
+    ) -> Result<Vec<BatchGradingResult>> {
         info!(
             request_count = grading_requests.len(),
             "Falling back to individual grading for answers"
         );
-        
+
         let mut results = Vec::new();
         for (i, req) in grading_requests.iter().enumerate() {
             // Create a temporary card for the grading call
@@ -638,7 +677,10 @@ Focus on conceptual understanding rather than exact text matching."#,
                 links: None,
             };
 
-            match self.grade_answer(&temp_card, &req.question, &req.user_answer).await {
+            match self
+                .grade_answer(&temp_card, &req.question, &req.user_answer)
+                .await
+            {
                 Ok(grading_result) => {
                     results.push(BatchGradingResult {
                         question_id: (i + 1).to_string(),
@@ -657,7 +699,8 @@ Focus on conceptual understanding rather than exact text matching."#,
                     results.push(BatchGradingResult {
                         question_id: (i + 1).to_string(),
                         is_correct: false,
-                        feedback: "Unable to grade this answer due to technical issues.".to_string(),
+                        feedback: "Unable to grade this answer due to technical issues."
+                            .to_string(),
                         suggested_rating: 2,
                     });
                 }
@@ -667,7 +710,7 @@ Focus on conceptual understanding rather than exact text matching."#,
     }
 
     // Phase 2: Concurrent individual grading methods
-    
+
     /// Grade answers using true parallel processing with concurrent individual LLM calls
     pub async fn grade_answers_concurrently(
         &self,
@@ -681,7 +724,7 @@ Focus on conceptual understanding rather than exact text matching."#,
 
         let max_concurrent = max_concurrent_tasks.unwrap_or(5); // Default to 5 concurrent tasks
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
-        
+
         info!(
             card_id = %card.id,
             question_count = questions_and_answers.len(),
@@ -690,21 +733,23 @@ Focus on conceptual understanding rather than exact text matching."#,
         );
 
         let mut tasks = Vec::new();
-        
+
         for (index, (question, answer)) in questions_and_answers.into_iter().enumerate() {
             let service = self.clone();
             let card_clone = card.clone();
             let question_clone = question.clone();
             let answer_clone = answer.clone();
             let semaphore_clone = semaphore.clone();
-            
+
             let task = tokio::spawn(async move {
                 let _permit = semaphore_clone.acquire().await.unwrap();
-                
+
                 let start_time = std::time::Instant::now();
-                let result = service.grade_answer(&card_clone, &question_clone, &answer_clone).await;
+                let result = service
+                    .grade_answer(&card_clone, &question_clone, &answer_clone)
+                    .await;
                 let duration = start_time.elapsed();
-                
+
                 match result {
                     Ok(grading_result) => {
                         debug!(
@@ -713,13 +758,17 @@ Focus on conceptual understanding rather than exact text matching."#,
                             is_correct = grading_result.is_correct,
                             "Concurrent grading task completed successfully"
                         );
-                        
-                        Ok((index, BatchGradingResult {
-                            question_id: (index + 1).to_string(),
-                            is_correct: grading_result.is_correct,
-                            feedback: grading_result.feedback,
-                            suggested_rating: grading_result.suggested_rating,
-                        }, duration))
+
+                        Ok((
+                            index,
+                            BatchGradingResult {
+                                question_id: (index + 1).to_string(),
+                                is_correct: grading_result.is_correct,
+                                feedback: grading_result.feedback,
+                                suggested_rating: grading_result.suggested_rating,
+                            },
+                            duration,
+                        ))
                     }
                     Err(e) => {
                         error!(
@@ -732,17 +781,17 @@ Focus on conceptual understanding rather than exact text matching."#,
                     }
                 }
             });
-            
+
             tasks.push(task);
         }
 
         // Wait for all concurrent tasks to complete
         let task_results = future::join_all(tasks).await;
-        
+
         let mut results = Vec::new();
         let mut errors = Vec::new();
         let mut durations = Vec::new();
-        
+
         for task_result in task_results {
             match task_result {
                 Ok(Ok((index, batch_result, duration))) => {
@@ -758,7 +807,7 @@ Focus on conceptual understanding rather than exact text matching."#,
                 }
             }
         }
-        
+
         // Handle any errors by providing default responses
         for (index, error) in errors {
             warn!(
@@ -766,25 +815,29 @@ Focus on conceptual understanding rather than exact text matching."#,
                 error = %error,
                 "Providing default response for failed concurrent grading task"
             );
-            
-            results.push((index, BatchGradingResult {
-                question_id: (index + 1).to_string(),
-                is_correct: false,
-                feedback: "Unable to grade this answer due to technical issues.".to_string(),
-                suggested_rating: 2,
-            }));
+
+            results.push((
+                index,
+                BatchGradingResult {
+                    question_id: (index + 1).to_string(),
+                    is_correct: false,
+                    feedback: "Unable to grade this answer due to technical issues.".to_string(),
+                    suggested_rating: 2,
+                },
+            ));
         }
-        
+
         // Sort results by original index to maintain order
         results.sort_by_key(|(index, _)| *index);
-        let final_results: Vec<BatchGradingResult> = results.into_iter().map(|(_, result)| result).collect();
-        
+        let final_results: Vec<BatchGradingResult> =
+            results.into_iter().map(|(_, result)| result).collect();
+
         let avg_duration = if !durations.is_empty() {
             durations.iter().sum::<std::time::Duration>().as_millis() / durations.len() as u128
         } else {
             0
         };
-        
+
         info!(
             card_id = %card.id,
             results_count = final_results.len(),
@@ -805,12 +858,19 @@ Focus on conceptual understanding rather than exact text matching."#,
         max_concurrent_tasks: Option<usize>,
     ) -> Result<(Vec<BatchGradingResult>, String, Option<String>)> {
         let start_time = std::time::Instant::now();
-        
+
         let requested_mode = processing_mode.unwrap_or("parallel");
-        
+
         // Try parallel processing first if requested
         if requested_mode == "parallel" {
-            match self.grade_answers_concurrently(card, questions_and_answers.clone(), max_concurrent_tasks).await {
+            match self
+                .grade_answers_concurrently(
+                    card,
+                    questions_and_answers.clone(),
+                    max_concurrent_tasks,
+                )
+                .await
+            {
                 Ok(results) => {
                     let duration = start_time.elapsed();
                     info!(
@@ -830,18 +890,19 @@ Focus on conceptual understanding rather than exact text matching."#,
                 }
             }
         }
-        
+
         // Try batch processing as fallback
         if requested_mode == "parallel" || requested_mode == "batch" {
             // Convert to batch grading requests
-            let batch_requests: Vec<BatchGradingRequest> = questions_and_answers.iter()
+            let batch_requests: Vec<BatchGradingRequest> = questions_and_answers
+                .iter()
                 .map(|(question, answer)| BatchGradingRequest {
                     card_content: card.content.clone(),
                     question: question.clone(),
                     user_answer: answer.clone(),
                 })
                 .collect();
-                
+
             match self.grade_batch_answers(&batch_requests).await {
                 Ok(results) => {
                     let duration = start_time.elapsed();
@@ -850,7 +911,7 @@ Focus on conceptual understanding rather than exact text matching."#,
                     } else {
                         None
                     };
-                    
+
                     info!(
                         card_id = %card.id,
                         duration_ms = duration.as_millis() as u64,
@@ -868,10 +929,10 @@ Focus on conceptual understanding rather than exact text matching."#,
                 }
             }
         }
-        
+
         // Final fallback: sequential individual grading
         let mut results = Vec::new();
-        
+
         for (index, (question, answer)) in questions_and_answers.into_iter().enumerate() {
             match self.grade_answer(card, &question, &answer).await {
                 Ok(grading_result) => {
@@ -892,23 +953,26 @@ Focus on conceptual understanding rather than exact text matching."#,
                     results.push(BatchGradingResult {
                         question_id: (index + 1).to_string(),
                         is_correct: false,
-                        feedback: "Unable to grade this answer due to technical issues.".to_string(),
+                        feedback: "Unable to grade this answer due to technical issues."
+                            .to_string(),
                         suggested_rating: 2,
                     });
                 }
             }
         }
-        
+
         let duration = start_time.elapsed();
-        let fallback_reason = Some("Both parallel and batch processing failed, used sequential processing".to_string());
-        
+        let fallback_reason = Some(
+            "Both parallel and batch processing failed, used sequential processing".to_string(),
+        );
+
         info!(
             card_id = %card.id,
             duration_ms = duration.as_millis() as u64,
             processing_mode = "sequential_fallback",
             "Completed sequential answer grading fallback"
         );
-        
+
         Ok((results, "sequential_fallback".to_string(), fallback_reason))
     }
 }

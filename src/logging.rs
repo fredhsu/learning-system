@@ -1,7 +1,7 @@
 // Macros file - tracing macros are imported within the macro definitions
 
 /// Standardized logging macros for consistent field names and message patterns across the application
-/// 
+///
 /// These macros ensure:
 /// - Consistent field naming conventions
 /// - Appropriate logging levels for different scenarios
@@ -235,7 +235,8 @@ macro_rules! log_service_warn {
         tracing::warn!(
             service = $service,
             operation = $operation,
-            "Service warning: {}", $msg
+            "Service warning: {}",
+            $msg
         );
     };
 }
@@ -338,21 +339,20 @@ macro_rules! log_system_event {
         tracing::info!(
             event_type = "startup",
             component = $component,
-            "System event: {}", $msg
+            "System event: {}",
+            $msg
         );
     };
     (shutdown, component = $component:expr, $msg:expr) => {
         tracing::info!(
             event_type = "shutdown",
             component = $component,
-            "System event: {}", $msg
+            "System event: {}",
+            $msg
         );
     };
     (config, $msg:expr) => {
-        tracing::info!(
-            event_type = "configuration",
-            "System event: {}", $msg
-        );
+        tracing::info!(event_type = "configuration", "System event: {}", $msg);
     };
 }
 
@@ -436,8 +436,19 @@ mod tests {
         log_db_operation!(debug, "select_card", card_id = card_id, duration_ms = 10);
         log_db_operation!(info, "migration", "database initialized");
 
-        log_llm_operation!(start, "generate_questions", provider = "openai", card_count = 5);
-        log_llm_operation!(success, "generate_questions", provider = "openai", duration_ms = 1500, tokens = 1000);
+        log_llm_operation!(
+            start,
+            "generate_questions",
+            provider = "openai",
+            card_count = 5
+        );
+        log_llm_operation!(
+            success,
+            "generate_questions",
+            provider = "openai",
+            duration_ms = 1500,
+            tokens = 1000
+        );
 
         log_system_event!(startup, component = "server", "server starting");
         log_system_event!(config, "configuration loaded successfully");

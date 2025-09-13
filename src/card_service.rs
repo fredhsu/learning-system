@@ -33,7 +33,7 @@ impl CardService {
     // Card CRUD operations
     pub async fn create_card(&self, request: CreateCardRequest) -> Result<Card> {
         let card = self.db.create_card(request).await?;
-        
+
         // Create backlinks for any initial links, but only for existing cards
         if let Some(ref links_json) = card.links {
             let links: Vec<Uuid> = serde_json::from_str(links_json).unwrap_or_default();
@@ -50,11 +50,14 @@ impl CardService {
                 }
             }
         }
-        
+
         Ok(card)
     }
 
-    pub async fn create_card_with_zettel_links(&self, request: CreateCardWithZettelLinksRequest) -> Result<Card> {
+    pub async fn create_card_with_zettel_links(
+        &self,
+        request: CreateCardWithZettelLinksRequest,
+    ) -> Result<Card> {
         let links = if let Some(zettel_links) = request.zettel_links {
             Some(self.resolve_zettel_ids_to_uuids(&zettel_links).await?)
         } else {
@@ -97,25 +100,32 @@ impl CardService {
             // Validate that the new zettel_id doesn't already exist (unless it's the same card)
             if let Some(existing) = self.db.get_card_by_zettel_id(&new_zettel_id).await? {
                 if existing.id != card.id {
-                    return Err(anyhow::anyhow!("Zettelkasten ID '{}' already exists", new_zettel_id));
+                    return Err(anyhow::anyhow!(
+                        "Zettelkasten ID '{}' already exists",
+                        new_zettel_id
+                    ));
                 }
             }
-            
+
             let old_zettel_id = card.zettel_id.clone();
             card.zettel_id = new_zettel_id.clone();
-            
+
             // Handle Zettel ID change by checking for textual references
             // Note: The UUID-based links and backlinks will continue to work correctly
             // as they reference the card by its immutable UUID, not the Zettel ID
             if old_zettel_id != new_zettel_id {
                 // Check if any other cards reference the old Zettel ID in their content
-                match self.db.find_cards_referencing_zettel_id(&old_zettel_id).await {
+                match self
+                    .db
+                    .find_cards_referencing_zettel_id(&old_zettel_id)
+                    .await
+                {
                     Ok(referencing_cards) => {
                         let referencing_others: Vec<_> = referencing_cards
                             .into_iter()
                             .filter(|c| c.id != card.id) // Exclude self-references
                             .collect();
-                        
+
                         if !referencing_others.is_empty() {
                             warn!(
                                 card_id = %card.id,
@@ -173,7 +183,9 @@ impl CardService {
                     valid_new_links.push(*link_id);
                 }
             }
-            self.db.update_backlinks(card.id, &old_links, &valid_new_links).await?;
+            self.db
+                .update_backlinks(card.id, &old_links, &valid_new_links)
+                .await?;
         }
 
         // Handle topic updates if provided
@@ -185,7 +197,11 @@ impl CardService {
         Ok(Some(card))
     }
 
-    pub async fn update_card_with_zettel_links(&self, id: Uuid, request: UpdateCardWithZettelLinksRequest) -> Result<Option<Card>> {
+    pub async fn update_card_with_zettel_links(
+        &self,
+        id: Uuid,
+        request: UpdateCardWithZettelLinksRequest,
+    ) -> Result<Option<Card>> {
         let links = if let Some(zettel_links) = request.zettel_links {
             Some(self.resolve_zettel_ids_to_uuids(&zettel_links).await?)
         } else {
@@ -227,7 +243,7 @@ impl CardService {
 
     pub async fn get_cards_due_optimized(&self) -> Result<Vec<Card>> {
         let mut cards = self.get_cards_due_for_review().await?;
-        
+
         if cards.len() <= 1 {
             return Ok(cards);
         }
@@ -241,35 +257,37 @@ impl CardService {
         // 1. Group by content similarity/length for better LLM context
         // 2. Prioritize cards that are significantly overdue
         // 3. Group cards with similar difficulty levels
-        
+
         cards.sort_by(|a, b| {
             // First, prioritize significantly overdue cards (more than 2x their original interval)
             let now = chrono::Utc::now();
             let a_overdue_ratio = calculate_overdue_ratio(a, now);
             let b_overdue_ratio = calculate_overdue_ratio(b, now);
-            
+
             // If one card is significantly more overdue, prioritize it
             if (a_overdue_ratio - b_overdue_ratio).abs() > 1.5 {
-                return b_overdue_ratio.partial_cmp(&a_overdue_ratio).unwrap_or(std::cmp::Ordering::Equal);
+                return b_overdue_ratio
+                    .partial_cmp(&a_overdue_ratio)
+                    .unwrap_or(std::cmp::Ordering::Equal);
             }
-            
+
             // Group by content length for better LLM batching
             // Similar length content tends to have better batch generation results
             let a_length_bucket = get_content_length_bucket(a.content.len());
             let b_length_bucket = get_content_length_bucket(b.content.len());
-            
+
             if a_length_bucket != b_length_bucket {
                 return a_length_bucket.cmp(&b_length_bucket);
             }
-            
+
             // Within same length bucket, group by difficulty for more consistent question generation
             let a_difficulty_bucket = get_difficulty_bucket(a.difficulty);
             let b_difficulty_bucket = get_difficulty_bucket(b.difficulty);
-            
+
             if a_difficulty_bucket != b_difficulty_bucket {
                 return a_difficulty_bucket.cmp(&b_difficulty_bucket);
             }
-            
+
             // Finally, sort by next_review (oldest first)
             a.next_review.cmp(&b.next_review)
         });
@@ -302,12 +320,14 @@ impl CardService {
         self.db.update_card_after_review(&updated_card).await?;
 
         // Create a review record
-        self.db.create_review(
-            card_id,
-            rating,
-            review_log.scheduled_days as f64,
-            1.0, // Placeholder ease factor, FSRS doesn't use traditional ease factor
-        ).await?;
+        self.db
+            .create_review(
+                card_id,
+                rating,
+                review_log.scheduled_days as f64,
+                1.0, // Placeholder ease factor, FSRS doesn't use traditional ease factor
+            )
+            .await?;
 
         Ok(Some(updated_card))
     }
@@ -332,13 +352,13 @@ impl CardService {
         if let Some(links_json) = card.links {
             let link_ids: Vec<Uuid> = serde_json::from_str(&links_json)?;
             let mut linked_cards = Vec::new();
-            
+
             for link_id in link_ids {
                 if let Some(linked_card) = self.db.get_card(link_id).await? {
                     linked_cards.push(linked_card);
                 }
             }
-            
+
             Ok(linked_cards)
         } else {
             Ok(Vec::new())
@@ -351,19 +371,24 @@ impl CardService {
 
     pub async fn resolve_zettel_ids_to_uuids(&self, zettel_ids: &[String]) -> Result<Vec<Uuid>> {
         let mut uuids = Vec::new();
-        
+
         for zettel_id in zettel_ids {
             let zettel_id = zettel_id.trim();
             if zettel_id.is_empty() {
                 continue;
             }
-            
+
             match self.db.get_card_by_zettel_id(zettel_id).await? {
                 Some(card) => uuids.push(card.id),
-                None => return Err(anyhow::anyhow!("Card with Zettel ID '{}' not found", zettel_id)),
+                None => {
+                    return Err(anyhow::anyhow!(
+                        "Card with Zettel ID '{}' not found",
+                        zettel_id
+                    ));
+                }
             }
         }
-        
+
         Ok(uuids)
     }
 }
@@ -404,7 +429,10 @@ mod tests {
         // Read
         let retrieved_card = service.get_card(created_card.id).await.unwrap();
         assert!(retrieved_card.is_some());
-        assert_eq!(retrieved_card.as_ref().unwrap().content, "Service test card");
+        assert_eq!(
+            retrieved_card.as_ref().unwrap().content,
+            "Service test card"
+        );
 
         // Update
         let update_request = UpdateCardRequest {
@@ -415,7 +443,10 @@ mod tests {
             links: None,
         };
 
-        let updated_card = service.update_card(created_card.id, update_request).await.unwrap();
+        let updated_card = service
+            .update_card(created_card.id, update_request)
+            .await
+            .unwrap();
         assert!(updated_card.is_some());
         assert_eq!(updated_card.unwrap().content, "Updated service test card");
 
@@ -460,21 +491,27 @@ mod tests {
         let service = create_test_service().await;
 
         // Create two cards
-        let card1 = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "SERVICE-TEST-005".to_string(),
-            content: "Card 1".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let card1 = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "SERVICE-TEST-005".to_string(),
+                content: "Card 1".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
-        let card2 = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "SERVICE-TEST-006".to_string(),
-            content: "Card 2".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let card2 = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "SERVICE-TEST-006".to_string(),
+                content: "Card 2".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
         // Link card1 to card2
         let update_request = UpdateCardRequest {
@@ -501,13 +538,16 @@ mod tests {
     async fn test_card_service_review_functionality() {
         let service = create_test_service().await;
 
-        let card = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "SERVICE-TEST-008".to_string(),
-            content: "Review test".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let card = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "SERVICE-TEST-008".to_string(),
+                content: "Review test".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
         // Initially card should be due for review
         let due_cards = service.get_cards_due_for_review().await.unwrap();
@@ -526,7 +566,10 @@ mod tests {
         let service = create_test_service().await;
 
         // Create a topic
-        let topic = service.create_topic("Test Topic".to_string(), None).await.unwrap();
+        let topic = service
+            .create_topic("Test Topic".to_string(), None)
+            .await
+            .unwrap();
         assert_eq!(topic.name, "Test Topic");
 
         // Get all topics
@@ -540,34 +583,46 @@ mod tests {
         let service = create_test_service().await;
 
         // Create three cards
-        let card1 = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "1.1".to_string(),
-            content: "Card 1 content".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let card1 = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "1.1".to_string(),
+                content: "Card 1 content".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
-        let _card2 = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "1.2".to_string(),
-            content: "Card 2 content".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let _card2 = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "1.2".to_string(),
+                content: "Card 2 content".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
-        let _card3 = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "2.1".to_string(),
-            content: "Card 3 content".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let _card3 = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "2.1".to_string(),
+                content: "Card 3 content".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
         // Test linking by Zettel IDs (this will be the new functionality)
         let zettel_links = vec!["1.2".to_string(), "2.1".to_string()];
-        let link_ids = service.resolve_zettel_ids_to_uuids(&zettel_links).await.unwrap();
-        
+        let link_ids = service
+            .resolve_zettel_ids_to_uuids(&zettel_links)
+            .await
+            .unwrap();
+
         // Update card1 to link to cards 2 and 3 by Zettel ID
         let update_request = UpdateCardRequest {
             title: None,
@@ -582,8 +637,9 @@ mod tests {
         // Test getting linked cards
         let linked_cards = service.get_linked_cards(card1.id).await.unwrap();
         assert_eq!(linked_cards.len(), 2);
-        
-        let linked_zettel_ids: Vec<String> = linked_cards.iter().map(|c| c.zettel_id.clone()).collect();
+
+        let linked_zettel_ids: Vec<String> =
+            linked_cards.iter().map(|c| c.zettel_id.clone()).collect();
         assert!(linked_zettel_ids.contains(&"1.2".to_string()));
         assert!(linked_zettel_ids.contains(&"2.1".to_string()));
     }
@@ -594,7 +650,9 @@ mod tests {
 
         // Test with nonexistent Zettel IDs
         let invalid_zettel_ids = vec!["999.999".to_string(), "invalid-id".to_string()];
-        let result = service.resolve_zettel_ids_to_uuids(&invalid_zettel_ids).await;
+        let result = service
+            .resolve_zettel_ids_to_uuids(&invalid_zettel_ids)
+            .await;
         assert!(result.is_err());
     }
 
@@ -603,13 +661,16 @@ mod tests {
         let service = create_test_service().await;
 
         // Create one valid card
-        let _card = service.create_card(CreateCardRequest {
-            title: None,
-            zettel_id: "valid.1".to_string(),
-            content: "Valid card".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
+        let _card = service
+            .create_card(CreateCardRequest {
+                title: None,
+                zettel_id: "valid.1".to_string(),
+                content: "Valid card".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
 
         // Test with mix of valid and invalid Zettel IDs
         let mixed_zettel_ids = vec!["valid.1".to_string(), "invalid.999".to_string()];
@@ -657,11 +718,13 @@ pub fn calculate_overdue_ratio(card: &Card, now: DateTime<Utc>) -> f64 {
     if card.next_review <= now {
         let overdue_duration = now.signed_duration_since(card.next_review).num_hours() as f64;
         let total_interval = if let Some(last_reviewed) = card.last_reviewed {
-            card.next_review.signed_duration_since(last_reviewed).num_hours() as f64
+            card.next_review
+                .signed_duration_since(last_reviewed)
+                .num_hours() as f64
         } else {
             24.0 // Default to 1 day for new cards
         };
-        
+
         if total_interval > 0.0 {
             overdue_duration / total_interval
         } else {
@@ -674,19 +737,19 @@ pub fn calculate_overdue_ratio(card: &Card, now: DateTime<Utc>) -> f64 {
 
 pub fn get_content_length_bucket(length: usize) -> u8 {
     match length {
-        0..=100 => 0,      // Very short
-        101..=300 => 1,    // Short
-        301..=600 => 2,    // Medium
-        601..=1200 => 3,   // Long
-        _ => 4,            // Very long
+        0..=100 => 0,    // Very short
+        101..=300 => 1,  // Short
+        301..=600 => 2,  // Medium
+        601..=1200 => 3, // Long
+        _ => 4,          // Very long
     }
 }
 
 pub fn get_difficulty_bucket(difficulty: f64) -> u8 {
     match difficulty {
-        d if d < 2.0 => 0,      // Easy
-        d if d < 4.0 => 1,      // Medium
-        d if d < 6.0 => 2,      // Hard
-        _ => 3,                 // Very hard
+        d if d < 2.0 => 0, // Easy
+        d if d < 4.0 => 1, // Medium
+        d if d < 6.0 => 2, // Hard
+        _ => 3,            // Very hard
     }
 }

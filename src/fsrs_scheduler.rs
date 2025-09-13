@@ -1,7 +1,7 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 
-use crate::models::{Card};
+use crate::models::Card;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rating {
@@ -24,17 +24,21 @@ pub struct FSRSScheduler {
 
 impl FSRSScheduler {
     pub fn new() -> Self {
-        Self {
-            initial_ease: 2.5,
-        }
+        Self { initial_ease: 2.5 }
     }
 
-    pub fn schedule_card(&self, card: &Card, rating: Rating, now: DateTime<Utc>) -> Result<(Card, ReviewLog)> {
-        let elapsed_days = card.last_reviewed
+    pub fn schedule_card(
+        &self,
+        card: &Card,
+        rating: Rating,
+        now: DateTime<Utc>,
+    ) -> Result<(Card, ReviewLog)> {
+        let elapsed_days = card
+            .last_reviewed
             .map(|last| (now - last).num_days())
             .unwrap_or(0) as u32;
 
-        let (new_interval, new_difficulty, new_stability, new_reps, new_lapses, new_state) = 
+        let (new_interval, new_difficulty, new_stability, new_reps, new_lapses, new_state) =
             self.calculate_new_parameters(card, rating, elapsed_days);
 
         let next_review = now + Duration::days(new_interval);
@@ -63,7 +67,12 @@ impl FSRSScheduler {
         Ok((updated_card, review_log))
     }
 
-    fn calculate_new_parameters(&self, card: &Card, rating: Rating, elapsed_days: u32) -> (i64, f64, f64, i32, i32, String) {
+    fn calculate_new_parameters(
+        &self,
+        card: &Card,
+        rating: Rating,
+        elapsed_days: u32,
+    ) -> (i64, f64, f64, i32, i32, String) {
         match card.state.as_str() {
             "New" => self.handle_new_card(rating),
             "Learning" => self.handle_learning_card(card, rating),
@@ -82,41 +91,138 @@ impl FSRSScheduler {
         }
     }
 
-    fn handle_learning_card(&self, card: &Card, rating: Rating) -> (i64, f64, f64, i32, i32, String) {
+    fn handle_learning_card(
+        &self,
+        card: &Card,
+        rating: Rating,
+    ) -> (i64, f64, f64, i32, i32, String) {
         match rating {
-            Rating::Again => (1, card.difficulty + 0.5, 1.0, card.reps, card.lapses + 1, "Learning".to_string()),
-            Rating::Hard => (6, card.difficulty + 0.2, 2.0, card.reps + 1, card.lapses, "Learning".to_string()),
-            Rating::Good => (1, card.difficulty, 3.0, card.reps + 1, card.lapses, "Review".to_string()),
-            Rating::Easy => (4, (card.difficulty - 0.2).max(1.0), 4.0, card.reps + 1, card.lapses, "Review".to_string()),
+            Rating::Again => (
+                1,
+                card.difficulty + 0.5,
+                1.0,
+                card.reps,
+                card.lapses + 1,
+                "Learning".to_string(),
+            ),
+            Rating::Hard => (
+                6,
+                card.difficulty + 0.2,
+                2.0,
+                card.reps + 1,
+                card.lapses,
+                "Learning".to_string(),
+            ),
+            Rating::Good => (
+                1,
+                card.difficulty,
+                3.0,
+                card.reps + 1,
+                card.lapses,
+                "Review".to_string(),
+            ),
+            Rating::Easy => (
+                4,
+                (card.difficulty - 0.2).max(1.0),
+                4.0,
+                card.reps + 1,
+                card.lapses,
+                "Review".to_string(),
+            ),
         }
     }
 
-    fn handle_review_card(&self, card: &Card, rating: Rating, _elapsed_days: u32) -> (i64, f64, f64, i32, i32, String) {
+    fn handle_review_card(
+        &self,
+        card: &Card,
+        rating: Rating,
+        _elapsed_days: u32,
+    ) -> (i64, f64, f64, i32, i32, String) {
         let base_interval = card.stability as i64;
-        
+
         match rating {
-            Rating::Again => (1, card.difficulty + 0.3, 1.0, card.reps, card.lapses + 1, "Relearning".to_string()),
+            Rating::Again => (
+                1,
+                card.difficulty + 0.3,
+                1.0,
+                card.reps,
+                card.lapses + 1,
+                "Relearning".to_string(),
+            ),
             Rating::Hard => {
                 let new_interval = (base_interval as f64 * 1.2).round() as i64;
-                (new_interval.max(1), card.difficulty + 0.15, card.stability * 1.1, card.reps + 1, card.lapses, "Review".to_string())
-            },
+                (
+                    new_interval.max(1),
+                    card.difficulty + 0.15,
+                    card.stability * 1.1,
+                    card.reps + 1,
+                    card.lapses,
+                    "Review".to_string(),
+                )
+            }
             Rating::Good => {
                 let new_interval = (base_interval as f64 * self.initial_ease).round() as i64;
-                (new_interval.max(1), card.difficulty, card.stability * self.initial_ease, card.reps + 1, card.lapses, "Review".to_string())
-            },
+                (
+                    new_interval.max(1),
+                    card.difficulty,
+                    card.stability * self.initial_ease,
+                    card.reps + 1,
+                    card.lapses,
+                    "Review".to_string(),
+                )
+            }
             Rating::Easy => {
                 let new_interval = (base_interval as f64 * self.initial_ease * 1.3).round() as i64;
-                (new_interval.max(1), (card.difficulty - 0.15).max(1.0), card.stability * self.initial_ease * 1.3, card.reps + 1, card.lapses, "Review".to_string())
-            },
+                (
+                    new_interval.max(1),
+                    (card.difficulty - 0.15).max(1.0),
+                    card.stability * self.initial_ease * 1.3,
+                    card.reps + 1,
+                    card.lapses,
+                    "Review".to_string(),
+                )
+            }
         }
     }
 
-    fn handle_relearning_card(&self, card: &Card, rating: Rating) -> (i64, f64, f64, i32, i32, String) {
+    fn handle_relearning_card(
+        &self,
+        card: &Card,
+        rating: Rating,
+    ) -> (i64, f64, f64, i32, i32, String) {
         match rating {
-            Rating::Again => (1, card.difficulty + 0.5, 1.0, card.reps, card.lapses + 1, "Relearning".to_string()),
-            Rating::Hard => (6, card.difficulty + 0.2, 2.0, card.reps + 1, card.lapses, "Relearning".to_string()),
-            Rating::Good => (1, card.difficulty, 3.0, card.reps + 1, card.lapses, "Review".to_string()),
-            Rating::Easy => (4, (card.difficulty - 0.2).max(1.0), 4.0, card.reps + 1, card.lapses, "Review".to_string()),
+            Rating::Again => (
+                1,
+                card.difficulty + 0.5,
+                1.0,
+                card.reps,
+                card.lapses + 1,
+                "Relearning".to_string(),
+            ),
+            Rating::Hard => (
+                6,
+                card.difficulty + 0.2,
+                2.0,
+                card.reps + 1,
+                card.lapses,
+                "Relearning".to_string(),
+            ),
+            Rating::Good => (
+                1,
+                card.difficulty,
+                3.0,
+                card.reps + 1,
+                card.lapses,
+                "Review".to_string(),
+            ),
+            Rating::Easy => (
+                4,
+                (card.difficulty - 0.2).max(1.0),
+                4.0,
+                card.reps + 1,
+                card.lapses,
+                "Review".to_string(),
+            ),
         }
     }
 
@@ -180,10 +286,22 @@ mod tests {
     #[test]
     fn test_rating_conversion() {
         // Test valid ratings
-        assert!(matches!(FSRSScheduler::get_rating_from_int(1), Some(Rating::Again)));
-        assert!(matches!(FSRSScheduler::get_rating_from_int(2), Some(Rating::Hard)));
-        assert!(matches!(FSRSScheduler::get_rating_from_int(3), Some(Rating::Good)));
-        assert!(matches!(FSRSScheduler::get_rating_from_int(4), Some(Rating::Easy)));
+        assert!(matches!(
+            FSRSScheduler::get_rating_from_int(1),
+            Some(Rating::Again)
+        ));
+        assert!(matches!(
+            FSRSScheduler::get_rating_from_int(2),
+            Some(Rating::Hard)
+        ));
+        assert!(matches!(
+            FSRSScheduler::get_rating_from_int(3),
+            Some(Rating::Good)
+        ));
+        assert!(matches!(
+            FSRSScheduler::get_rating_from_int(4),
+            Some(Rating::Easy)
+        ));
 
         // Test invalid ratings
         assert_eq!(FSRSScheduler::get_rating_from_int(0), None);
@@ -210,12 +328,12 @@ mod tests {
         assert!(result.is_ok());
 
         let (updated_card, review_log) = result.unwrap();
-        
+
         // Card should have been updated
         assert_eq!(updated_card.reps, 1);
         assert!(updated_card.next_review > card.next_review);
         assert!(updated_card.last_reviewed.is_some());
-        
+
         // Review log should be populated
         assert!(review_log.scheduled_days > 0);
     }
@@ -228,7 +346,7 @@ mod tests {
         card.lapses = 1;
         card.state = "Review".to_string(); // Set to Review state
         card.stability = 5.0; // Give it some stability
-        
+
         let rating = Rating::Again;
         let review_time = Utc::now();
 
@@ -236,7 +354,7 @@ mod tests {
         assert!(result.is_ok());
 
         let (updated_card, _review_log) = result.unwrap();
-        
+
         // Lapses should increase for Review state cards
         assert_eq!(updated_card.lapses, card.lapses + 1);
         assert!(updated_card.last_reviewed.is_some());
@@ -249,19 +367,25 @@ mod tests {
         let review_time = Utc::now();
 
         // First review with Good rating (New -> Learning)
-        let (card1, _) = scheduler.schedule_card(&card, Rating::Good, review_time).unwrap();
+        let (card1, _) = scheduler
+            .schedule_card(&card, Rating::Good, review_time)
+            .unwrap();
         assert_eq!(card1.reps, 1);
         assert_eq!(card1.state, "Learning");
-        
+
         // Second review with Good rating (Learning -> Review)
-        let (card2, _) = scheduler.schedule_card(&card1, Rating::Good, review_time).unwrap();
+        let (card2, _) = scheduler
+            .schedule_card(&card1, Rating::Good, review_time)
+            .unwrap();
         assert_eq!(card2.reps, 2);
         assert_eq!(card2.state, "Review");
         // For Learning->Review transition, interval should be meaningful
         assert!(card2.next_review >= card1.next_review);
-        
+
         // Third review with Easy rating (Review -> Review with longer interval)
-        let (card3, _) = scheduler.schedule_card(&card2, Rating::Easy, review_time).unwrap();
+        let (card3, _) = scheduler
+            .schedule_card(&card2, Rating::Easy, review_time)
+            .unwrap();
         assert_eq!(card3.reps, 3);
         assert_eq!(card3.state, "Review");
         // Easy rating on Review card should increase interval significantly
@@ -275,7 +399,9 @@ mod tests {
         assert_eq!(card.state, "New");
 
         // First good review should move from New to Learning or Review
-        let (updated_card, _) = scheduler.schedule_card(&card, Rating::Good, Utc::now()).unwrap();
+        let (updated_card, _) = scheduler
+            .schedule_card(&card, Rating::Good, Utc::now())
+            .unwrap();
         assert_ne!(updated_card.state, "New");
     }
 
@@ -295,11 +421,11 @@ mod tests {
     #[test]
     fn test_retrievability_calculation() {
         let scheduler = FSRSScheduler::new();
-        
+
         // Test retrievability with 0 elapsed days
         let retrievability = scheduler.calculate_retrievability(1.0, 0.0);
         assert_eq!(retrievability, 1.0);
-        
+
         // Test retrievability with some elapsed days
         let retrievability = scheduler.calculate_retrievability(1.0, 1.0);
         assert!(retrievability < 1.0);

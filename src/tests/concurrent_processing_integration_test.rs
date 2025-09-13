@@ -2,7 +2,7 @@
 mod concurrent_processing_integration_tests {
     use super::*;
     use crate::{
-        llm_service::{LLMService, GradingResult},
+        llm_service::{GradingResult, LLMService},
         models::*,
     };
     use std::sync::{Arc, Mutex};
@@ -33,14 +33,14 @@ mod concurrent_processing_integration_tests {
             questions_and_answers: Vec<(QuizQuestion, String)>,
         ) -> Result<Vec<(usize, GradingResult)>, Box<dyn std::error::Error + Send + Sync>> {
             let mut handles = vec![];
-            
+
             for (index, (question, answer)) in questions_and_answers.into_iter().enumerate() {
                 let service = self.llm_service.clone();
                 let card_clone = card.clone();
                 let question_clone = question.clone();
                 let answer_clone = answer.clone();
                 let active_tasks = self.active_tasks.clone();
-                
+
                 // Limit concurrent tasks
                 {
                     let mut tasks = active_tasks.lock().unwrap();
@@ -51,29 +51,31 @@ mod concurrent_processing_integration_tests {
                     }
                     *tasks += 1;
                 }
-                
+
                 let handle = tokio::spawn(async move {
-                    let result = service.grade_answer(&card_clone, &question_clone, &answer_clone).await;
-                    
+                    let result = service
+                        .grade_answer(&card_clone, &question_clone, &answer_clone)
+                        .await;
+
                     // Decrement active task count
                     {
                         let mut tasks = active_tasks.lock().unwrap();
                         *tasks = tasks.saturating_sub(1);
                     }
-                    
+
                     match result {
                         Ok(grading_result) => Ok((index, grading_result)),
                         Err(e) => Err((index, e)),
                     }
                 });
-                
+
                 handles.push(handle);
             }
 
             // Wait for all tasks to complete
             let mut results = Vec::with_capacity(handles.len());
             let mut errors = Vec::new();
-            
+
             for handle in handles {
                 match handle.await {
                     Ok(Ok((index, result))) => {
@@ -87,14 +89,14 @@ mod concurrent_processing_integration_tests {
                     }
                 }
             }
-            
+
             // Sort results by original index to maintain order
             results.sort_by_key(|(index, _)| *index);
-            
+
             if !errors.is_empty() {
                 return Err(format!("Failed to grade {} answers", errors.len()).into());
             }
-            
+
             Ok(results)
         }
 
@@ -104,24 +106,28 @@ mod concurrent_processing_integration_tests {
             questions_and_answers: Vec<(QuizQuestion, String)>,
         ) -> Result<Vec<(usize, GradingResult)>, Box<dyn std::error::Error + Send + Sync>> {
             let mut results = Vec::new();
-            
+
             for (index, (question, answer)) in questions_and_answers.into_iter().enumerate() {
-                let result = self.llm_service.grade_answer(card, &question, &answer).await?;
+                let result = self
+                    .llm_service
+                    .grade_answer(card, &question, &answer)
+                    .await?;
                 results.push((index, result));
             }
-            
+
             Ok(results)
         }
     }
 
     fn create_test_card() -> Card {
         use chrono::Utc;
-        
+
         Card {
             id: Uuid::new_v4(),
             zettel_id: "CONC001".to_string(),
             title: Some("Concurrent Processing Test".to_string()),
-            content: "This card tests concurrent processing of individual grading tasks.".to_string(),
+            content: "This card tests concurrent processing of individual grading tasks."
+                .to_string(),
             creation_date: Utc::now(),
             last_reviewed: None,
             next_review: Utc::now(),
@@ -157,7 +163,9 @@ mod concurrent_processing_integration_tests {
                 question: "What is a potential downside of concurrency?".to_string(),
                 question_type: "short_answer".to_string(),
                 options: None,
-                correct_answer: Some("Increased complexity and potential race conditions".to_string()),
+                correct_answer: Some(
+                    "Increased complexity and potential race conditions".to_string(),
+                ),
             },
             QuizQuestion {
                 question: "Which Rust construct spawns concurrent tasks?".to_string(),
@@ -215,7 +223,9 @@ mod concurrent_processing_integration_tests {
         assert_eq!(sequential_results.len(), 5);
 
         // Verify both produce valid grading results
-        for ((seq_idx, seq_result), (conc_idx, conc_result)) in sequential_results.iter().zip(concurrent_results.iter()) {
+        for ((seq_idx, seq_result), (conc_idx, conc_result)) in
+            sequential_results.iter().zip(concurrent_results.iter())
+        {
             assert_eq!(seq_idx, conc_idx);
             assert_eq!(seq_result.is_correct, conc_result.is_correct);
             // Feedback might vary slightly due to mock randomization, so we don't assert equality
@@ -225,8 +235,11 @@ mod concurrent_processing_integration_tests {
             assert!(conc_result.suggested_rating >= 1 && conc_result.suggested_rating <= 4);
         }
 
-        println!("Sequential: {}ms, Concurrent: {}ms", 
-                sequential_duration.as_millis(), concurrent_duration.as_millis());
+        println!(
+            "Sequential: {}ms, Concurrent: {}ms",
+            sequential_duration.as_millis(),
+            concurrent_duration.as_millis()
+        );
 
         // For mock services, we can't guarantee performance improvement,
         // but we can verify both complete successfully
@@ -240,7 +253,10 @@ mod concurrent_processing_integration_tests {
         let service = ConcurrentGradingService::new(max_concurrent);
         let card = create_test_card();
         let questions = create_test_questions();
-        let answers = vec!["Answer"; 5].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let answers = vec!["Answer"; 5]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
 
         let questions_and_answers: Vec<_> = questions.into_iter().zip(answers).collect();
 
@@ -254,8 +270,11 @@ mod concurrent_processing_integration_tests {
         assert_eq!(results.len(), 5);
 
         // Verify that tasks were limited (this is implicitly tested by the max_concurrent_tasks logic)
-        println!("Concurrent processing with {} max tasks completed in {}ms", 
-                max_concurrent, duration.as_millis());
+        println!(
+            "Concurrent processing with {} max tasks completed in {}ms",
+            max_concurrent,
+            duration.as_millis()
+        );
 
         // All tasks should complete successfully despite limitation
         for (idx, result) in &results {
@@ -269,7 +288,7 @@ mod concurrent_processing_integration_tests {
     async fn test_concurrent_error_handling() {
         let service = ConcurrentGradingService::new(3);
         let card = create_test_card();
-        
+
         // Create questions with one invalid question to test error handling
         let mut questions = create_test_questions();
         questions.push(QuizQuestion {
@@ -279,7 +298,10 @@ mod concurrent_processing_integration_tests {
             correct_answer: None,
         });
 
-        let answers = vec!["Answer"; 6].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let answers = vec!["Answer"; 6]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
         let questions_and_answers: Vec<_> = questions.into_iter().zip(answers).collect();
 
         let result = service
@@ -291,7 +313,10 @@ mod concurrent_processing_integration_tests {
             Ok(results) => {
                 // If successful, should have filtered out invalid questions
                 assert!(results.len() <= 6);
-                println!("Concurrent processing handled errors, got {} valid results", results.len());
+                println!(
+                    "Concurrent processing handled errors, got {} valid results",
+                    results.len()
+                );
             }
             Err(e) => {
                 // If failed, should provide meaningful error message
@@ -336,7 +361,7 @@ mod concurrent_processing_integration_tests {
     async fn test_concurrent_large_batch_processing() {
         let service = ConcurrentGradingService::new(5);
         let card = create_test_card();
-        
+
         // Create a large batch of questions
         let questions: Vec<_> = (0..20)
             .map(|i| QuizQuestion {
@@ -347,9 +372,7 @@ mod concurrent_processing_integration_tests {
             })
             .collect();
 
-        let answers: Vec<_> = (0..20)
-            .map(|i| format!("Answer {}", i + 1))
-            .collect();
+        let answers: Vec<_> = (0..20).map(|i| format!("Answer {}", i + 1)).collect();
 
         let questions_and_answers: Vec<_> = questions.into_iter().zip(answers).collect();
 
@@ -369,8 +392,11 @@ mod concurrent_processing_integration_tests {
             assert!(result.suggested_rating >= 1 && result.suggested_rating <= 4);
         }
 
-        println!("Large batch concurrent processing: {} questions in {}ms", 
-                results.len(), duration.as_millis());
+        println!(
+            "Large batch concurrent processing: {} questions in {}ms",
+            results.len(),
+            duration.as_millis()
+        );
 
         // Should complete large batch within reasonable time
         assert!(duration.as_millis() < 10000); // 10 seconds max for mock service
@@ -384,7 +410,10 @@ mod concurrent_processing_integration_tests {
         // Run multiple concurrent processing sessions to test resource cleanup
         for session in 0..5 {
             let questions = create_test_questions();
-            let answers = vec!["Test answer"; 5].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+            let answers = vec!["Test answer"; 5]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
             let questions_and_answers: Vec<_> = questions.into_iter().zip(answers).collect();
 
             let results = service
@@ -396,9 +425,17 @@ mod concurrent_processing_integration_tests {
 
             // Check that active tasks counter is reset
             let active_tasks = *service.active_tasks.lock().unwrap();
-            assert_eq!(active_tasks, 0, "Active tasks should be reset after session {}", session + 1);
+            assert_eq!(
+                active_tasks,
+                0,
+                "Active tasks should be reset after session {}",
+                session + 1
+            );
 
-            println!("Session {} completed successfully with proper cleanup", session + 1);
+            println!(
+                "Session {} completed successfully with proper cleanup",
+                session + 1
+            );
         }
     }
 
@@ -406,7 +443,7 @@ mod concurrent_processing_integration_tests {
     async fn test_concurrent_mixed_question_types() {
         let service = ConcurrentGradingService::new(4);
         let card = create_test_card();
-        
+
         let mixed_questions = vec![
             QuizQuestion {
                 question: "Short answer question".to_string(),
@@ -441,7 +478,8 @@ mod concurrent_processing_integration_tests {
             "This is a detailed essay response covering the topic comprehensively.".to_string(),
         ];
 
-        let questions_and_answers: Vec<_> = mixed_questions.into_iter().zip(mixed_answers).collect();
+        let questions_and_answers: Vec<_> =
+            mixed_questions.into_iter().zip(mixed_answers).collect();
 
         let results = service
             .grade_answers_concurrently(&card, questions_and_answers)
@@ -455,7 +493,7 @@ mod concurrent_processing_integration_tests {
             assert!(*idx < 4);
             assert!(result.feedback.len() > 0);
             assert!(result.suggested_rating >= 1 && result.suggested_rating <= 4);
-            
+
             // All should be correct with our mock answers
             assert!(result.is_correct, "Question {} should be correct", idx + 1);
         }
@@ -467,7 +505,7 @@ mod concurrent_processing_integration_tests {
     async fn test_concurrent_backpressure_handling() {
         let service = ConcurrentGradingService::new(2); // Very limited concurrency
         let card = create_test_card();
-        
+
         // Create many questions to test backpressure
         let questions: Vec<_> = (0..15)
             .map(|i| QuizQuestion {
@@ -478,9 +516,7 @@ mod concurrent_processing_integration_tests {
             })
             .collect();
 
-        let answers: Vec<_> = (0..15)
-            .map(|i| format!("Answer {}", i + 1))
-            .collect();
+        let answers: Vec<_> = (0..15).map(|i| format!("Answer {}", i + 1)).collect();
 
         let questions_and_answers: Vec<_> = questions.into_iter().zip(answers).collect();
 
@@ -495,8 +531,11 @@ mod concurrent_processing_integration_tests {
 
         // With only 2 concurrent tasks, this should take longer than unlimited concurrency
         // but should still complete successfully
-        println!("Backpressure test: {} questions with max 2 concurrent tasks in {}ms",
-                results.len(), duration.as_millis());
+        println!(
+            "Backpressure test: {} questions with max 2 concurrent tasks in {}ms",
+            results.len(),
+            duration.as_millis()
+        );
 
         // Verify results are still correctly ordered and valid
         let mut sorted_results = results.clone();

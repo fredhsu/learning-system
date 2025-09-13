@@ -51,12 +51,10 @@ impl Database {
         .await?;
 
         // Add title column to existing tables if it doesn't exist
-        sqlx::query(
-            "ALTER TABLE cards ADD COLUMN title TEXT"
-        )
-        .execute(&self.pool)
-        .await
-        .ok(); // Ignore error if column already exists
+        sqlx::query("ALTER TABLE cards ADD COLUMN title TEXT")
+            .execute(&self.pool)
+            .await
+            .ok(); // Ignore error if column already exists
 
         sqlx::query(
             r#"
@@ -117,21 +115,26 @@ impl Database {
         Ok(())
     }
 
-
     // Card operations
     pub async fn create_card(&self, request: CreateCardRequest) -> Result<Card> {
         let card_id = Uuid::new_v4();
         let now = Utc::now();
-        let links_json = request.links.as_ref().map(|l| serde_json::to_string(l).unwrap());
+        let links_json = request
+            .links
+            .as_ref()
+            .map(|l| serde_json::to_string(l).unwrap());
 
         // Validate that zettel_id doesn't already exist
         let existing = sqlx::query("SELECT id FROM cards WHERE zettel_id = ?1")
             .bind(&request.zettel_id)
             .fetch_optional(&self.pool)
             .await?;
-        
+
         if existing.is_some() {
-            return Err(anyhow::anyhow!("Zettelkasten ID '{}' already exists", request.zettel_id));
+            return Err(anyhow::anyhow!(
+                "Zettelkasten ID '{}' already exists",
+                request.zettel_id
+            ));
         }
 
         let card = Card {
@@ -177,13 +180,11 @@ impl Database {
 
         // Associate with topics
         for topic_id in request.topic_ids {
-            sqlx::query(
-                "INSERT INTO card_topics (card_id, topic_id) VALUES (?1, ?2)"
-            )
-            .bind(card.id.to_string())
-            .bind(topic_id.to_string())
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO card_topics (card_id, topic_id) VALUES (?1, ?2)")
+                .bind(card.id.to_string())
+                .bind(topic_id.to_string())
+                .execute(&self.pool)
+                .await?;
         }
 
         Ok(card)
@@ -195,10 +196,19 @@ impl Database {
             zettel_id: row.get("zettel_id"),
             title: row.get("title"),
             content: row.get("content"),
-            creation_date: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("creation_date"))?.with_timezone(&Utc),
-            last_reviewed: row.get::<Option<String>, _>("last_reviewed")
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-            next_review: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("next_review"))?.with_timezone(&Utc),
+            creation_date: chrono::DateTime::parse_from_rfc3339(
+                &row.get::<String, _>("creation_date"),
+            )?
+            .with_timezone(&Utc),
+            last_reviewed: row.get::<Option<String>, _>("last_reviewed").and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            }),
+            next_review: chrono::DateTime::parse_from_rfc3339(
+                &row.get::<String, _>("next_review"),
+            )?
+            .with_timezone(&Utc),
             difficulty: row.get("difficulty"),
             stability: row.get("stability"),
             retrievability: row.get("retrievability"),
@@ -210,12 +220,10 @@ impl Database {
     }
 
     pub async fn get_card(&self, id: Uuid) -> Result<Option<Card>> {
-        let row = sqlx::query(
-            "SELECT * FROM cards WHERE id = ?1"
-        )
-        .bind(id.to_string())
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query("SELECT * FROM cards WHERE id = ?1")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
 
         if let Some(row) = row {
             Ok(Some(self.map_row_to_card(row)?))
@@ -234,12 +242,11 @@ impl Database {
 
     pub async fn get_cards_due_for_review(&self) -> Result<Vec<Card>> {
         let now = Utc::now().to_rfc3339();
-        let rows = sqlx::query(
-            "SELECT * FROM cards WHERE next_review <= ?1 ORDER BY next_review ASC"
-        )
-        .bind(now)
-        .fetch_all(&self.pool)
-        .await?;
+        let rows =
+            sqlx::query("SELECT * FROM cards WHERE next_review <= ?1 ORDER BY next_review ASC")
+                .bind(now)
+                .fetch_all(&self.pool)
+                .await?;
 
         self.rows_to_cards(rows)
     }
@@ -282,14 +289,12 @@ impl Database {
             description,
         };
 
-        sqlx::query(
-            "INSERT INTO topics (id, name, description) VALUES (?1, ?2, ?3)"
-        )
-        .bind(topic.id.to_string())
-        .bind(&topic.name)
-        .bind(&topic.description)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO topics (id, name, description) VALUES (?1, ?2, ?3)")
+            .bind(topic.id.to_string())
+            .bind(&topic.name)
+            .bind(&topic.description)
+            .execute(&self.pool)
+            .await?;
 
         Ok(topic)
     }
@@ -312,7 +317,13 @@ impl Database {
     }
 
     // Review operations
-    pub async fn create_review(&self, card_id: Uuid, rating: i32, interval: f64, ease_factor: f64) -> Result<Review> {
+    pub async fn create_review(
+        &self,
+        card_id: Uuid,
+        rating: i32,
+        interval: f64,
+        ease_factor: f64,
+    ) -> Result<Review> {
         let review = Review {
             id: Uuid::new_v4(),
             card_id,
@@ -366,12 +377,10 @@ impl Database {
     }
 
     pub async fn get_card_by_zettel_id(&self, zettel_id: &str) -> Result<Option<Card>> {
-        let row = sqlx::query(
-            "SELECT * FROM cards WHERE zettel_id = ?1"
-        )
-        .bind(zettel_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query("SELECT * FROM cards WHERE zettel_id = ?1")
+            .bind(zettel_id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         if let Some(row) = row {
             Ok(Some(self.map_row_to_card(row)?))
@@ -389,7 +398,7 @@ impl Database {
         // Use LIKE query for case-insensitive search
         let query_pattern = format!("%{}%", search_query.to_lowercase());
         let rows = sqlx::query(
-            "SELECT * FROM cards WHERE LOWER(content) LIKE ?1 ORDER BY creation_date DESC"
+            "SELECT * FROM cards WHERE LOWER(content) LIKE ?1 ORDER BY creation_date DESC",
         )
         .bind(&query_pattern)
         .fetch_all(&self.pool)
@@ -399,10 +408,14 @@ impl Database {
     }
 
     // Backlinks operations
-    pub async fn create_backlinks(&self, source_card_id: Uuid, target_card_ids: &[Uuid]) -> Result<()> {
+    pub async fn create_backlinks(
+        &self,
+        source_card_id: Uuid,
+        target_card_ids: &[Uuid],
+    ) -> Result<()> {
         for target_card_id in target_card_ids {
             sqlx::query(
-                "INSERT OR IGNORE INTO backlinks (source_card_id, target_card_id) VALUES (?1, ?2)"
+                "INSERT OR IGNORE INTO backlinks (source_card_id, target_card_id) VALUES (?1, ?2)",
             )
             .bind(source_card_id.to_string())
             .bind(target_card_id.to_string())
@@ -412,27 +425,27 @@ impl Database {
         Ok(())
     }
 
-    pub async fn remove_backlinks(&self, source_card_id: Uuid, target_card_ids: &[Uuid]) -> Result<()> {
+    pub async fn remove_backlinks(
+        &self,
+        source_card_id: Uuid,
+        target_card_ids: &[Uuid],
+    ) -> Result<()> {
         for target_card_id in target_card_ids {
-            sqlx::query(
-                "DELETE FROM backlinks WHERE source_card_id = ?1 AND target_card_id = ?2"
-            )
-            .bind(source_card_id.to_string())
-            .bind(target_card_id.to_string())
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("DELETE FROM backlinks WHERE source_card_id = ?1 AND target_card_id = ?2")
+                .bind(source_card_id.to_string())
+                .bind(target_card_id.to_string())
+                .execute(&self.pool)
+                .await?;
         }
         Ok(())
     }
 
     #[allow(dead_code)]
     pub async fn remove_all_backlinks_from_source(&self, source_card_id: Uuid) -> Result<()> {
-        sqlx::query(
-            "DELETE FROM backlinks WHERE source_card_id = ?1"
-        )
-        .bind(source_card_id.to_string())
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("DELETE FROM backlinks WHERE source_card_id = ?1")
+            .bind(source_card_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -443,7 +456,7 @@ impl Database {
             INNER JOIN backlinks b ON c.id = b.source_card_id
             WHERE b.target_card_id = ?1
             ORDER BY c.creation_date DESC
-            "#
+            "#,
         )
         .bind(target_card_id.to_string())
         .fetch_all(&self.pool)
@@ -452,15 +465,22 @@ impl Database {
         self.rows_to_cards(rows)
     }
 
-    pub async fn update_backlinks(&self, source_card_id: Uuid, old_target_ids: &[Uuid], new_target_ids: &[Uuid]) -> Result<()> {
+    pub async fn update_backlinks(
+        &self,
+        source_card_id: Uuid,
+        old_target_ids: &[Uuid],
+        new_target_ids: &[Uuid],
+    ) -> Result<()> {
         // Remove old backlinks
         if !old_target_ids.is_empty() {
-            self.remove_backlinks(source_card_id, old_target_ids).await?;
+            self.remove_backlinks(source_card_id, old_target_ids)
+                .await?;
         }
 
         // Add new backlinks
         if !new_target_ids.is_empty() {
-            self.create_backlinks(source_card_id, new_target_ids).await?;
+            self.create_backlinks(source_card_id, new_target_ids)
+                .await?;
         }
 
         Ok(())
@@ -468,11 +488,9 @@ impl Database {
 
     #[allow(dead_code)]
     pub async fn get_cards_linking_to(&self, target_card_id: Uuid) -> Result<Vec<Card>> {
-        let rows = sqlx::query(
-            "SELECT * FROM cards WHERE links IS NOT NULL AND links != '[]'"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query("SELECT * FROM cards WHERE links IS NOT NULL AND links != '[]'")
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut linking_cards = Vec::new();
         for row in rows {
@@ -490,12 +508,11 @@ impl Database {
 
     pub async fn find_cards_referencing_zettel_id(&self, zettel_id: &str) -> Result<Vec<Card>> {
         let search_pattern = format!("%{}%", zettel_id);
-        let rows = sqlx::query(
-            "SELECT * FROM cards WHERE content LIKE ?1 ORDER BY creation_date DESC"
-        )
-        .bind(&search_pattern)
-        .fetch_all(&self.pool)
-        .await?;
+        let rows =
+            sqlx::query("SELECT * FROM cards WHERE content LIKE ?1 ORDER BY creation_date DESC")
+                .bind(&search_pattern)
+                .fetch_all(&self.pool)
+                .await?;
 
         self.rows_to_cards(rows)
     }
@@ -509,11 +526,11 @@ mod tests {
     #[tokio::test]
     async fn test_database_initialization() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         // Test that tables were created by trying to query them
         let cards = db.get_all_cards().await.unwrap();
         assert_eq!(cards.len(), 0);
-        
+
         let topics = db.get_all_topics().await.unwrap();
         assert_eq!(topics.len(), 0);
     }
@@ -521,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn test_database_delete_card() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         let create_request = CreateCardRequest {
             zettel_id: "DB-TEST-001".to_string(),
             title: Some("Test Card Title".to_string()),
@@ -529,21 +546,21 @@ mod tests {
             topic_ids: vec![],
             links: None,
         };
-        
+
         let card = db.create_card(create_request).await.unwrap();
-        
+
         // Verify card exists
         let retrieved = db.get_card(card.id).await.unwrap();
         assert!(retrieved.is_some());
-        
+
         // Delete the card
         let deleted = db.delete_card(card.id).await.unwrap();
         assert!(deleted);
-        
+
         // Verify card is gone
         let retrieved = db.get_card(card.id).await.unwrap();
         assert!(retrieved.is_none());
-        
+
         // Test deleting non-existent card
         let fake_id = Uuid::new_v4();
         let not_deleted = db.delete_card(fake_id).await.unwrap();
@@ -553,7 +570,7 @@ mod tests {
     #[tokio::test]
     async fn test_database_update_card_content() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         let create_request = CreateCardRequest {
             zettel_id: "DB-TEST-002".to_string(),
             title: Some("Test Update Title".to_string()),
@@ -561,17 +578,17 @@ mod tests {
             topic_ids: vec![],
             links: Some(vec![Uuid::new_v4()]),
         };
-        
+
         let mut card = db.create_card(create_request).await.unwrap();
         assert_eq!(card.content, "Original content");
         assert!(card.links.is_some());
-        
+
         // Update the card
         card.content = "Updated content".to_string();
         card.links = None;
-        
+
         db.update_card_content(&card).await.unwrap();
-        
+
         // Retrieve and verify update
         let updated = db.get_card(card.id).await.unwrap();
         assert!(updated.is_some());
@@ -583,12 +600,15 @@ mod tests {
     #[tokio::test]
     async fn test_database_topic_operations() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         // Test topic creation
-        let topic = db.create_topic("Test Topic".to_string(), Some("Description".to_string())).await.unwrap();
+        let topic = db
+            .create_topic("Test Topic".to_string(), Some("Description".to_string()))
+            .await
+            .unwrap();
         assert_eq!(topic.name, "Test Topic");
         assert_eq!(topic.description, Some("Description".to_string()));
-        
+
         // Test getting all topics
         let topics = db.get_all_topics().await.unwrap();
         assert_eq!(topics.len(), 1);
@@ -598,7 +618,7 @@ mod tests {
     #[tokio::test]
     async fn test_database_cards_due_for_review() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         let create_request = CreateCardRequest {
             zettel_id: "DB-TEST-003".to_string(),
             title: Some("Due Card Title".to_string()),
@@ -606,9 +626,9 @@ mod tests {
             topic_ids: vec![],
             links: None,
         };
-        
+
         let _card = db.create_card(create_request).await.unwrap();
-        
+
         // Card should be due for review immediately (next_review = creation_date)
         let due_cards = db.get_cards_due_for_review().await.unwrap();
         assert_eq!(due_cards.len(), 1);
@@ -618,39 +638,45 @@ mod tests {
     #[tokio::test]
     async fn test_database_backlinks_operations() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         // Create two cards
-        let card_a = db.create_card(CreateCardRequest {
-            zettel_id: "BACKLINK-TEST-A".to_string(),
-            title: Some("Card A Title".to_string()),
-            content: "Card A".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
-        let card_b = db.create_card(CreateCardRequest {
-            zettel_id: "BACKLINK-TEST-B".to_string(),
-            title: Some("Card B Title".to_string()),
-            content: "Card B".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
+        let card_a = db
+            .create_card(CreateCardRequest {
+                zettel_id: "BACKLINK-TEST-A".to_string(),
+                title: Some("Card A Title".to_string()),
+                content: "Card A".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
+        let card_b = db
+            .create_card(CreateCardRequest {
+                zettel_id: "BACKLINK-TEST-B".to_string(),
+                title: Some("Card B Title".to_string()),
+                content: "Card B".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
         // Initially no backlinks
         let backlinks = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks.len(), 0);
-        
+
         // Create backlink from A to B
         db.create_backlinks(card_a.id, &[card_b.id]).await.unwrap();
-        
+
         // Verify backlink exists
         let backlinks = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks.len(), 1);
         assert_eq!(backlinks[0].id, card_a.id);
-        
+
         // Remove backlink
         db.remove_backlinks(card_a.id, &[card_b.id]).await.unwrap();
-        
+
         // Verify backlink is gone
         let backlinks = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks.len(), 0);
@@ -659,51 +685,64 @@ mod tests {
     #[tokio::test]
     async fn test_database_multiple_backlinks() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         // Create three cards
-        let card_a = db.create_card(CreateCardRequest {
-            zettel_id: "MULTI-BACKLINK-A".to_string(),
-            title: Some("Multi Card A".to_string()),
-            content: "Card A".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
-        let card_b = db.create_card(CreateCardRequest {
-            zettel_id: "MULTI-BACKLINK-B".to_string(),
-            title: Some("Multi Card B".to_string()),
-            content: "Card B".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
-        let card_c = db.create_card(CreateCardRequest {
-            zettel_id: "MULTI-BACKLINK-C".to_string(),
-            title: Some("Multi Card C".to_string()),
-            content: "Card C".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
+        let card_a = db
+            .create_card(CreateCardRequest {
+                zettel_id: "MULTI-BACKLINK-A".to_string(),
+                title: Some("Multi Card A".to_string()),
+                content: "Card A".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
+        let card_b = db
+            .create_card(CreateCardRequest {
+                zettel_id: "MULTI-BACKLINK-B".to_string(),
+                title: Some("Multi Card B".to_string()),
+                content: "Card B".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
+        let card_c = db
+            .create_card(CreateCardRequest {
+                zettel_id: "MULTI-BACKLINK-C".to_string(),
+                title: Some("Multi Card C".to_string()),
+                content: "Card C".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
         // Create backlinks from A to both B and C
-        db.create_backlinks(card_a.id, &[card_b.id, card_c.id]).await.unwrap();
-        
+        db.create_backlinks(card_a.id, &[card_b.id, card_c.id])
+            .await
+            .unwrap();
+
         // Verify both backlinks exist
         let backlinks_b = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks_b.len(), 1);
         assert_eq!(backlinks_b[0].id, card_a.id);
-        
+
         let backlinks_c = db.get_backlinks(card_c.id).await.unwrap();
         assert_eq!(backlinks_c.len(), 1);
         assert_eq!(backlinks_c[0].id, card_a.id);
-        
+
         // Update backlinks - remove B, keep C
-        db.update_backlinks(card_a.id, &[card_b.id, card_c.id], &[card_c.id]).await.unwrap();
-        
+        db.update_backlinks(card_a.id, &[card_b.id, card_c.id], &[card_c.id])
+            .await
+            .unwrap();
+
         // Verify B has no backlinks, C still has one
         let backlinks_b = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks_b.len(), 0);
-        
+
         let backlinks_c = db.get_backlinks(card_c.id).await.unwrap();
         assert_eq!(backlinks_c.len(), 1);
         assert_eq!(backlinks_c[0].id, card_a.id);
@@ -712,35 +751,41 @@ mod tests {
     #[tokio::test]
     async fn test_database_backlinks_cascade_delete() {
         let db = Database::new("sqlite::memory:").await.unwrap();
-        
+
         // Create two cards
-        let card_a = db.create_card(CreateCardRequest {
-            zettel_id: "CASCADE-TEST-A".to_string(),
-            title: Some("Cascade Card A".to_string()),
-            content: "Card A".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
-        let card_b = db.create_card(CreateCardRequest {
-            zettel_id: "CASCADE-TEST-B".to_string(),
-            title: Some("Cascade Card B".to_string()),
-            content: "Card B".to_string(),
-            topic_ids: vec![],
-            links: None,
-        }).await.unwrap();
-        
+        let card_a = db
+            .create_card(CreateCardRequest {
+                zettel_id: "CASCADE-TEST-A".to_string(),
+                title: Some("Cascade Card A".to_string()),
+                content: "Card A".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
+        let card_b = db
+            .create_card(CreateCardRequest {
+                zettel_id: "CASCADE-TEST-B".to_string(),
+                title: Some("Cascade Card B".to_string()),
+                content: "Card B".to_string(),
+                topic_ids: vec![],
+                links: None,
+            })
+            .await
+            .unwrap();
+
         // Create backlink
         db.create_backlinks(card_a.id, &[card_b.id]).await.unwrap();
-        
+
         // Verify backlink exists
         let backlinks = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks.len(), 1);
-        
+
         // Delete source card A
         let deleted = db.delete_card(card_a.id).await.unwrap();
         assert!(deleted);
-        
+
         // Verify backlinks are automatically cleaned up by foreign key cascade
         let backlinks = db.get_backlinks(card_b.id).await.unwrap();
         assert_eq!(backlinks.len(), 0);

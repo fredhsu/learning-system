@@ -1,16 +1,11 @@
 #[cfg(test)]
 mod batch_grading_integration_tests {
     use super::*;
-    use crate::{
-        api::*,
-        card_service::CardService,
-        llm_service::LLMService,
-        models::*,
-    };
+    use crate::{api::*, card_service::CardService, llm_service::LLMService, models::*};
     use axum::{
+        Router,
         body::Body,
         http::{Request, StatusCode},
-        Router,
     };
     use chrono::Utc;
     use serde_json::json;
@@ -37,7 +32,9 @@ mod batch_grading_integration_tests {
         let test_card_request = CreateCardRequest {
             zettel_id: "INT001".to_string(),
             title: Some("Integration Test Card".to_string()),
-            content: "This card tests the complete batch grading flow from frontend to backend and back.".to_string(),
+            content:
+                "This card tests the complete batch grading flow from frontend to backend and back."
+                    .to_string(),
             links: None,
             topic_ids: vec![],
         };
@@ -119,10 +116,10 @@ mod batch_grading_integration_tests {
 
         // Prepare batch answers (mix of correct and incorrect)
         let user_answers = vec![
-            "Testing batch grading flow".to_string(),    // Correct
-            "A) Integration testing".to_string(),        // Correct
-            "Faster processing".to_string(),             // Partially correct
-            "A) One per question".to_string(),           // Incorrect
+            "Testing batch grading flow".to_string(), // Correct
+            "A) Integration testing".to_string(),     // Correct
+            "Faster processing".to_string(),          // Partially correct
+            "A) One per question".to_string(),        // Incorrect
         ];
 
         let request_body = BatchAnswerRequest {
@@ -158,7 +155,9 @@ mod batch_grading_integration_tests {
         // Verify response
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json_response["success"], true);
@@ -257,13 +256,25 @@ mod batch_grading_integration_tests {
         // For mock services, we can't guarantee performance improvement due to artificial delays
         // Instead, we verify that both methods complete in reasonable time and produce same results
         let improvement_ratio = sequential_time.as_millis() as f64 / batch_time.as_millis() as f64;
-        
+
         // Both should complete within reasonable time (mock has 10ms delays)
-        assert!(batch_time.as_millis() < 1000, "Batch processing took too long: {}ms", batch_time.as_millis());
-        assert!(sequential_time.as_millis() < 1000, "Sequential processing took too long: {}ms", sequential_time.as_millis());
-        
-        println!("Performance comparison: Batch: {}ms, Sequential: {}ms, Ratio: {:.2}x", 
-            batch_time.as_millis(), sequential_time.as_millis(), improvement_ratio);
+        assert!(
+            batch_time.as_millis() < 1000,
+            "Batch processing took too long: {}ms",
+            batch_time.as_millis()
+        );
+        assert!(
+            sequential_time.as_millis() < 1000,
+            "Sequential processing took too long: {}ms",
+            sequential_time.as_millis()
+        );
+
+        println!(
+            "Performance comparison: Batch: {}ms, Sequential: {}ms, Ratio: {:.2}x",
+            batch_time.as_millis(),
+            sequential_time.as_millis(),
+            improvement_ratio
+        );
     }
 
     #[tokio::test]
@@ -308,10 +319,10 @@ mod batch_grading_integration_tests {
 
         // Test with very long answers to verify content handling
         let large_answers = vec![
-            "A".repeat(1000),  // Very long answer
-            "B".repeat(500),   // Medium length
-            "Short".to_string(),           // Short answer
-            "C".repeat(2000),  // Very very long
+            "A".repeat(1000),    // Very long answer
+            "B".repeat(500),     // Medium length
+            "Short".to_string(), // Short answer
+            "C".repeat(2000),    // Very very long
         ];
 
         let request_body = BatchAnswerRequest {
@@ -342,11 +353,13 @@ mod batch_grading_integration_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json_response["success"], true);
-        
+
         let results = json_response["data"].as_array().unwrap();
         assert_eq!(results.len(), 4);
 
@@ -362,23 +375,21 @@ mod batch_grading_integration_tests {
         let (app, session_id, card_id, _) = setup_integration_test().await;
 
         let request_body = BatchAnswerRequest {
-            answers: vec![
-                QuestionAnswer {
-                    question_index: 0,
-                    answer: "Concurrent test answer".to_string(),
-                },
-            ],
+            answers: vec![QuestionAnswer {
+                question_index: 0,
+                answer: "Concurrent test answer".to_string(),
+            }],
         };
 
         // Make multiple concurrent requests
         let mut handles = vec![];
-        
+
         for i in 0..5 {
             let app_clone = app.clone();
             let request_clone = serde_json::to_string(&request_body).unwrap();
             let session_id_clone = session_id;
             let card_id_clone = card_id;
-            
+
             let handle = tokio::spawn(async move {
                 app_clone
                     .oneshot(
@@ -394,7 +405,7 @@ mod batch_grading_integration_tests {
                     )
                     .await
             });
-            
+
             handles.push(handle);
         }
 
@@ -463,15 +474,21 @@ mod batch_grading_integration_tests {
         assert_eq!(response2.status(), StatusCode::OK);
 
         // Verify both responses are consistent
-        let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX).await.unwrap();
-        let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX).await.unwrap();
-        
+        let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
+            .await
+            .unwrap();
+
         let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
         let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
-        
+
         assert_eq!(json1["success"], json2["success"]);
-        assert_eq!(json1["data"].as_array().unwrap().len(), 
-                  json2["data"].as_array().unwrap().len());
+        assert_eq!(
+            json1["data"].as_array().unwrap().len(),
+            json2["data"].as_array().unwrap().len()
+        );
     }
 
     #[tokio::test]
@@ -479,7 +496,7 @@ mod batch_grading_integration_tests {
         let (app, session_id, card_id, questions) = setup_integration_test().await;
 
         // Step 1: Start review session (this should already be done in setup)
-        
+
         // Step 2: Submit batch answers
         let user_answers = vec![
             "Testing batch grading flow".to_string(),
@@ -517,13 +534,16 @@ mod batch_grading_integration_tests {
 
         assert_eq!(grading_response.status(), StatusCode::OK);
 
-        let grading_body = axum::body::to_bytes(grading_response.into_body(), usize::MAX).await.unwrap();
+        let grading_body = axum::body::to_bytes(grading_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let grading_json: serde_json::Value = serde_json::from_slice(&grading_body).unwrap();
-        
+
         let results = grading_json["data"].as_array().unwrap();
-        
+
         // Step 3: Calculate aggregated rating from results
-        let total_rating: i64 = results.iter()
+        let total_rating: i64 = results
+            .iter()
             .map(|r| r["suggested_rating"].as_i64().unwrap())
             .sum();
         let avg_rating = total_rating / results.len() as i64;
@@ -543,7 +563,10 @@ mod batch_grading_integration_tests {
 
         assert_eq!(review_response.status(), StatusCode::OK);
 
-        println!("Complete workflow test: {} questions -> {} avg rating -> FSRS update", 
-                questions.len(), avg_rating);
+        println!(
+            "Complete workflow test: {} questions -> {} avg rating -> FSRS update",
+            questions.len(),
+            avg_rating
+        );
     }
 }

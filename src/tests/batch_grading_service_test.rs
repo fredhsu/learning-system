@@ -1,10 +1,7 @@
 #[cfg(test)]
 mod batch_grading_service_tests {
     use super::*;
-    use crate::{
-        llm_service::LLMService,
-        models::*,
-    };
+    use crate::{llm_service::LLMService, models::*};
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -93,7 +90,10 @@ mod batch_grading_service_tests {
             },
         ];
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 2);
 
@@ -112,7 +112,10 @@ mod batch_grading_service_tests {
         let llm_service = LLMService::new_mock();
         let batch_requests: Vec<BatchGradingRequest> = vec![];
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert!(results.is_empty());
     }
@@ -132,7 +135,10 @@ mod batch_grading_service_tests {
             user_answer: "Single answer".to_string(),
         }];
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].question_id, "1");
@@ -167,7 +173,10 @@ mod batch_grading_service_tests {
             },
         ];
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].question_id, "1");
@@ -205,7 +214,10 @@ mod batch_grading_service_tests {
             },
         ];
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 2);
 
@@ -254,7 +266,10 @@ mod batch_grading_service_tests {
             },
         ];
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 3);
 
@@ -283,7 +298,10 @@ mod batch_grading_service_tests {
         }];
 
         // This should not fail due to content length
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert!(results[0].feedback.len() > 0);
@@ -293,21 +311,22 @@ mod batch_grading_service_tests {
     async fn test_batch_grading_fallback_mechanism() {
         let llm_service = LLMService::new_mock_with_batch_failure();
 
-        let batch_requests = vec![
-            BatchGradingRequest {
-                card_content: "Fallback test".to_string(),
-                question: QuizQuestion {
-                    question: "Fallback question".to_string(),
-                    question_type: "short_answer".to_string(),
-                    options: None,
-                    correct_answer: Some("Fallback answer".to_string()),
-                },
-                user_answer: "Fallback answer".to_string(),
+        let batch_requests = vec![BatchGradingRequest {
+            card_content: "Fallback test".to_string(),
+            question: QuizQuestion {
+                question: "Fallback question".to_string(),
+                question_type: "short_answer".to_string(),
+                options: None,
+                correct_answer: Some("Fallback answer".to_string()),
             },
-        ];
+            user_answer: "Fallback answer".to_string(),
+        }];
 
         // Should fall back to individual grading
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].question_id, "1");
@@ -333,7 +352,10 @@ mod batch_grading_service_tests {
             })
             .collect();
 
-        let results = llm_service.grade_batch_answers(&batch_requests).await.unwrap();
+        let results = llm_service
+            .grade_batch_answers(&batch_requests)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 20);
 
