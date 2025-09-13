@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod parallel_grading_phase2_tests {
-    use super::*;
     use crate::{api::*, card_service::CardService, llm_service::LLMService, models::*};
     use axum::{
         Router,
@@ -153,7 +152,7 @@ mod parallel_grading_phase2_tests {
     // TDD Test: Parallel processing should be faster than sequential
     #[tokio::test]
     async fn test_parallel_vs_sequential_performance() {
-        let (app, session_id, card_id, questions) = setup_parallel_test_app().await;
+        let (app, session_id, card_id, _questions) = setup_parallel_test_app().await;
 
         let answers = vec![
             QuestionAnswer {
@@ -184,7 +183,7 @@ mod parallel_grading_phase2_tests {
             "answers": answers
         });
 
-        let sequential_response = app
+        let _sequential_response = app
             .clone()
             .oneshot(
                 Request::builder()

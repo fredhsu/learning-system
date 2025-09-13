@@ -15,15 +15,18 @@ pub enum ApiError {
     DatabaseError(#[from] anyhow::Error),
 
     #[error("LLM service error: {0}")]
+    #[allow(dead_code)]
     LLMError(String),
 
     #[error("Resource already exists: {0}")]
     DuplicateResource(String),
 
     #[error("Bad request: {0}")]
+    #[allow(dead_code)]
     BadRequest(String),
 
     #[error("Internal server error: {0}")]
+    #[allow(dead_code)]
     InternalError(String),
 }
 
@@ -51,6 +54,7 @@ impl ErrorContext {
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_user_message(mut self, message: &str) -> Self {
         self.user_friendly_message = Some(message.to_string());
         self
@@ -169,6 +173,7 @@ impl ApiError {
     }
 
     /// Simple conversion without context (for backward compatibility)
+    #[allow(dead_code)]
     pub fn to_response(self) -> (StatusCode, Json<ApiResponse<()>>) {
         let context = ErrorContext::new("unknown", "resource");
         self.to_response_with_context(context)

@@ -19,6 +19,7 @@ impl Database {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub async fn new_in_memory() -> Result<Self> {
         let pool = SqlitePool::connect(":memory:").await?;
         let db = Database { pool };

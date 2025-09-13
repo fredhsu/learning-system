@@ -76,31 +76,37 @@ impl LLMService {
     }
 
     /// Get the provider name for logging and testing
+    #[allow(dead_code)]
     pub fn provider_name(&self) -> &'static str {
         self.provider.provider_name()
     }
 
     /// Get the model name being used
+    #[allow(dead_code)]
     pub fn model_name(&self) -> &str {
         self.provider.model_name()
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn new_mock() -> Self {
         Self::new_mock_internal(true, false)
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn new_mock_with_incorrect_answers() -> Self {
         Self::new_mock_internal(false, false)
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn new_mock_with_batch_failure() -> Self {
         Self::new_mock_internal(true, true)
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn new_mock_with_mixed_results() -> Self {
         use crate::llm_providers::MockProvider;
 
@@ -114,6 +120,7 @@ impl LLMService {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     fn new_mock_internal(correct_answers: bool, batch_fails: bool) -> Self {
         use crate::llm_providers::MockProvider;
 

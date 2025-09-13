@@ -16,7 +16,6 @@ use std::sync::{Arc, Mutex};
 use tokio::fs;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
-use tracing::info;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 

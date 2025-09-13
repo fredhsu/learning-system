@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod batch_grading_integration_tests {
-    use super::*;
     use crate::{api::*, card_service::CardService, llm_service::LLMService, models::*};
     use axum::{
         Router,
@@ -112,7 +111,7 @@ mod batch_grading_integration_tests {
 
     #[tokio::test]
     async fn test_complete_batch_grading_workflow() {
-        let (app, session_id, card_id, questions) = setup_integration_test().await;
+        let (app, session_id, card_id, _questions) = setup_integration_test().await;
 
         // Prepare batch answers (mix of correct and incorrect)
         let user_answers = vec![
@@ -184,7 +183,7 @@ mod batch_grading_integration_tests {
 
     #[tokio::test]
     async fn test_batch_vs_sequential_performance_comparison() {
-        let (app, session_id, card_id, questions) = setup_integration_test().await;
+        let (app, session_id, card_id, _questions) = setup_integration_test().await;
 
         let user_answers = vec![
             "Answer 1".to_string(),
@@ -384,7 +383,7 @@ mod batch_grading_integration_tests {
         // Make multiple concurrent requests
         let mut handles = vec![];
 
-        for i in 0..5 {
+        for _i in 0..5 {
             let app_clone = app.clone();
             let request_clone = serde_json::to_string(&request_body).unwrap();
             let session_id_clone = session_id;

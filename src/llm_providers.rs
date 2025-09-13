@@ -16,6 +16,7 @@ pub enum LLMProvider {
     OpenAI(OpenAIProvider),
     Gemini(GeminiProvider),
     #[cfg(test)]
+    #[allow(dead_code)]
     Mock(MockProvider),
 }
 
@@ -31,6 +32,7 @@ impl LLMProvider {
     }
 
     /// Get the provider name for logging
+    #[allow(dead_code)]
     pub fn provider_name(&self) -> &'static str {
         match self {
             LLMProvider::OpenAI(provider) => provider.provider_name(),
@@ -41,6 +43,7 @@ impl LLMProvider {
     }
 
     /// Get the model name being used
+    #[allow(dead_code)]
     pub fn model_name(&self) -> &str {
         match self {
             LLMProvider::OpenAI(provider) => provider.model_name(),
@@ -190,6 +193,7 @@ impl OpenAIProvider {
         "OpenAI"
     }
 
+    #[allow(dead_code)]
     pub fn model_name(&self) -> &str {
         &self.model
     }
@@ -334,6 +338,7 @@ impl GeminiProvider {
         "Gemini"
     }
 
+    #[allow(dead_code)]
     pub fn model_name(&self) -> &str {
         &self.model
     }
@@ -344,6 +349,7 @@ impl GeminiProvider {
 pub struct JsonResponseParser;
 
 impl JsonResponseParser {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self
     }
@@ -443,6 +449,7 @@ pub struct MockProvider {
 
 #[cfg(test)]
 impl MockProvider {
+    #[allow(dead_code)]
     pub fn new(correct_answers: bool, batch_fails: bool) -> Self {
         Self {
             correct_answers,
@@ -452,6 +459,7 @@ impl MockProvider {
     }
 
     /// Create a mock provider that returns mixed results (alternating correct/incorrect)
+    #[allow(dead_code)]
     pub fn new_mixed() -> Self {
         Self {
             correct_answers: false, // Will be ignored in mixed mode
@@ -480,33 +488,47 @@ impl MockProvider {
                 return Err(anyhow::anyhow!("Mock batch failure for testing fallback"));
             }
 
-            // Count questions in the prompt - look for the actual format used
-            let question_count = prompt
-                .lines()
-                .filter(|line| line.contains(". Card Content:"))
-                .count();
-
             let mut results = Vec::new();
-            for i in 1..=question_count {
-                // Handle mixed results: detect by checking if we're in mixed mode
-                let is_correct = if self.is_mixed_mode() {
-                    // Mixed mode: alternate results (first correct, second incorrect, etc.)
-                    i % 2 == 1 // Odd questions correct, even questions incorrect
-                } else {
-                    self.correct_answers
-                };
+            
+            if self.is_mixed_mode() {
+                // Mixed mode: always return exactly 2 results, first correct, second incorrect
+                results.push(serde_json::json!({
+                    "question_id": "1",
+                    "is_correct": true,
+                    "feedback": "Correct answer!",
+                    "suggested_rating": 4
+                }));
+                results.push(serde_json::json!({
+                    "question_id": "2", 
+                    "is_correct": false,
+                    "feedback": "Incorrect answer.",
+                    "suggested_rating": 2
+                }));
+            } else {
+                // Count questions in the prompt for regular mode
+                let question_count = prompt
+                    .lines()
+                    .filter(|line| {
+                        line.contains(". Card Content:") || 
+                        line.contains("Question ") || 
+                        line.contains("User Answer:")
+                    })
+                    .count()
+                    .max(1);
 
-                let result = serde_json::json!({
-                    "question_id": i.to_string(),
-                    "is_correct": is_correct,
-                    "feedback": if is_correct {
-                        "Excellent understanding demonstrated."
-                    } else {
-                        "This answer needs improvement."
-                    },
-                    "suggested_rating": if is_correct { 4 } else { 2 }
-                });
-                results.push(result);
+                for i in 1..=question_count {
+                    let result = serde_json::json!({
+                        "question_id": i.to_string(),
+                        "is_correct": self.correct_answers,
+                        "feedback": if self.correct_answers {
+                            "Excellent understanding demonstrated."
+                        } else {
+                            "This answer needs improvement."
+                        },
+                        "suggested_rating": if self.correct_answers { 4 } else { 2 }
+                    });
+                    results.push(result);
+                }
             }
 
             Ok(serde_json::to_string(&results)?)
@@ -515,8 +537,9 @@ impl MockProvider {
             if prompt.contains("Grade the following quiz answer") {
                 // For individual grading, use consistent behavior
                 let is_correct = if self.is_mixed_mode() {
-                    // In mixed mode, make individual grading succeed (for fallback testing)
-                    true
+                    // In mixed mode, alternate based on the answer content  
+                    // First question/answer should be correct, second should be incorrect
+                    !prompt.contains("B) Wrong Option")
                 } else {
                     self.correct_answers
                 };

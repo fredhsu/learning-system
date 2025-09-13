@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod batch_grading_tests {
-    use super::*;
     use crate::{api::*, card_service::CardService, llm_service::LLMService, models::*};
     use axum::{
         Router,
@@ -8,7 +7,6 @@ mod batch_grading_tests {
         http::{Request, StatusCode},
     };
     use chrono::Utc;
-    use serde_json::json;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     use tower::ServiceExt;
@@ -37,7 +35,6 @@ mod batch_grading_tests {
         let app = create_app(app_state);
 
         // Create test card
-        let card_id = Uuid::new_v4();
         let test_card_request = CreateCardRequest {
             zettel_id: "TEST001".to_string(),
             title: Some("Test Card".to_string()),

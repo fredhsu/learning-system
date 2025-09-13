@@ -1,13 +1,12 @@
 #[cfg(test)]
 mod batch_grading_service_tests {
-    use super::*;
     use crate::{llm_service::LLMService, models::*};
     use chrono::Utc;
     use uuid::Uuid;
 
     #[tokio::test]
     async fn test_batch_grading_request_construction() {
-        let llm_service = LLMService::new_mock();
+        let _llm_service = LLMService::new_mock();
 
         // Create test data
         let card = Card {

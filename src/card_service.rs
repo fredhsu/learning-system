@@ -22,6 +22,7 @@ impl CardService {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub async fn new_in_memory() -> Result<Self> {
         let db = Database::new_in_memory().await?;
         Ok(Self {

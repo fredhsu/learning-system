@@ -1047,6 +1047,7 @@ pub fn create_router(state: AppState) -> Router {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub fn create_app(state: AppState) -> Router {
     create_router(state)
 }

@@ -410,14 +410,13 @@ macro_rules! log_validation {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use uuid::Uuid;
 
     #[test]
     fn test_logging_macros_compile() {
         let card_id = Uuid::new_v4();
         let session_id = Uuid::new_v4();
-        let error = anyhow::anyhow!("test error");
+        let _error = anyhow::anyhow!("test error");
 
         // Test that all macro variants compile successfully
         log_api_start!("test_operation", card_id = card_id);
