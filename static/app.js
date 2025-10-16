@@ -193,6 +193,7 @@ class LearningSystem {
 
         // Review completion
         document.getElementById('new-review-btn').addEventListener('click', () => this.startNewReview());
+        document.getElementById('return-to-cards-btn').addEventListener('click', () => this.returnToCards());
 
         // Modal close buttons
         document.querySelectorAll('.close').forEach(closeBtn => {
@@ -1784,13 +1785,21 @@ class LearningSystem {
     async startNewReview() {
         // Hide completion screen
         document.getElementById('completion-screen').style.display = 'none';
-        
+
         // Reset animations and transitions
         document.getElementById('card-content-display').classList.remove('quiz-transition', 'fade-in');
         document.getElementById('quiz-questions').classList.remove('quiz-transition', 'fade-in');
-        
+
         // Load new review session
         await this.loadReviewSession();
+    }
+
+    returnToCards() {
+        // Hide completion screen
+        document.getElementById('completion-screen').style.display = 'none';
+
+        // Switch to cards view
+        this.switchView('cards');
     }
 
     async handleWikiLinkClick(linkText) {

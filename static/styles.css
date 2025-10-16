@@ -1050,6 +1050,23 @@ main {
     margin-top: 0.25rem;
 }
 
+.completion-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.completion-actions .secondary-btn,
+.completion-actions .primary-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 160px;
+    justify-content: center;
+}
+
 /* Animation Keyframes */
 @keyframes celebrationBounce {
     0% {
