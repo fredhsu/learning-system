@@ -113,7 +113,7 @@ impl OpenAIProvider {
             client: Client::new(),
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
-            model: model.unwrap_or_else(|| "gpt-4o-mini".to_string()),
+            model: model.unwrap_or_else(|| "gpt-5-mini".to_string()),
         }
     }
 }
@@ -489,7 +489,7 @@ impl MockProvider {
             }
 
             let mut results = Vec::new();
-            
+
             if self.is_mixed_mode() {
                 // Mixed mode: always return exactly 2 results, first correct, second incorrect
                 results.push(serde_json::json!({
@@ -499,7 +499,7 @@ impl MockProvider {
                     "suggested_rating": 4
                 }));
                 results.push(serde_json::json!({
-                    "question_id": "2", 
+                    "question_id": "2",
                     "is_correct": false,
                     "feedback": "Incorrect answer.",
                     "suggested_rating": 2
@@ -509,9 +509,9 @@ impl MockProvider {
                 let question_count = prompt
                     .lines()
                     .filter(|line| {
-                        line.contains(". Card Content:") || 
-                        line.contains("Question ") || 
-                        line.contains("User Answer:")
+                        line.contains(". Card Content:")
+                            || line.contains("Question ")
+                            || line.contains("User Answer:")
                     })
                     .count()
                     .max(1);
@@ -537,7 +537,7 @@ impl MockProvider {
             if prompt.contains("Grade the following quiz answer") {
                 // For individual grading, use consistent behavior
                 let is_correct = if self.is_mixed_mode() {
-                    // In mixed mode, alternate based on the answer content  
+                    // In mixed mode, alternate based on the answer content
                     // First question/answer should be correct, second should be incorrect
                     !prompt.contains("B) Wrong Option")
                 } else {
