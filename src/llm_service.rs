@@ -166,6 +166,7 @@ impl LLMService {
             - For short_answer, provide the expected answer
             - For problem_solving, provide the solution approach
             - Make questions challenging but fair
+            - The questions should emphasize practical, real world applications of the concepts, particurlarly when applied to machine learning or computer science.
             - Ensure questions test key concepts from the card"#,
             card.content
         );
