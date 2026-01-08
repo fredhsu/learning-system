@@ -143,7 +143,7 @@ impl LLMService {
 
         let prompt = format!(
             r#"Based on the following learning card content, generate 2-3 quiz questions to test understanding.
-            The questions should be varied in type (multiple choice, short answer, or problem-solving).
+            The questions should be varied in type (multiple choice, fill in the blank, short answer, or problem-solving).
 
             Card Content:
             {}
@@ -161,6 +161,7 @@ impl LLMService {
             }}
 
             Guidelines:
+            - Questions should be geared towards helping with spaced repetition: focused, precise, consistent, tractable, and effortful
             - For multiple_choice, provide 4 option texts WITHOUT any letter prefixes (A., B., etc.) - just the option content
             - The frontend will automatically add A., B., C., D. prefixes when displaying
             - For short_answer, provide the expected answer
