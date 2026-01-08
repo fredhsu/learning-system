@@ -260,16 +260,16 @@ impl CardService {
         // 3. Group cards with similar difficulty levels
 
         cards.sort_by(|a, b| {
-            // First, prioritize significantly overdue cards (more than 2x their original interval)
+            // First, prioritize overdue cards (higher ratio = more overdue)
             let now = chrono::Utc::now();
             let a_overdue_ratio = calculate_overdue_ratio(a, now);
             let b_overdue_ratio = calculate_overdue_ratio(b, now);
 
-            // If one card is significantly more overdue, prioritize it
-            if (a_overdue_ratio - b_overdue_ratio).abs() > 1.5 {
-                return b_overdue_ratio
-                    .partial_cmp(&a_overdue_ratio)
-                    .unwrap_or(std::cmp::Ordering::Equal);
+            // Sort by overdue ratio (descending - most overdue first)
+            // Use total_cmp to handle all f64 values consistently (including NaN, infinity)
+            match b_overdue_ratio.total_cmp(&a_overdue_ratio) {
+                std::cmp::Ordering::Equal => {}
+                other => return other,
             }
 
             // Group by content length for better LLM batching
