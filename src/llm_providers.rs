@@ -5,6 +5,7 @@ use tracing::{error, info};
 
 /// Common message structure for LLM requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct LLMMessage {
     pub role: String,
     pub content: String,

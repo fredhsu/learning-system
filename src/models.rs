@@ -30,6 +30,7 @@ pub struct Topic {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[allow(dead_code)]
 pub struct CardTopic {
     pub card_id: Uuid,
     pub topic_id: Uuid,
@@ -90,6 +91,7 @@ pub struct QuizQuestion {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct QuizResponse {
     pub card_id: Uuid,
     pub question: QuizQuestion,
@@ -122,6 +124,7 @@ pub struct BatchGradingRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct BatchGradingResponse {
     pub results: Vec<BatchGradingResult>,
 }
